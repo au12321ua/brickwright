@@ -63,6 +63,10 @@ On an existing build, use `build.find_connection_candidates` with a placed
 part or a named sub-model path. Use `facing` and `toward` to pick a face or
 hole, and `MotionRange` and `opening_toward` to describe an opening piece.
 
+For a lid or other moving assembly, build the leaf and its attached parts as a
+submodel and pass it as `content` so the trial checks the whole moving shape.
+The `hinged-panels` knowledge example shows this on a crate.
+
 Run `build.trial_connections(candidates)` to inspect several mounting poses.
 Use a passing candidate with `build.place_connection`. If a trial fails, read
 its `diagnostics` for the endpoint, colliding parts, or sampled movement, then

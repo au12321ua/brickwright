@@ -402,7 +402,8 @@ class LegoBuild(Cached, LegoGeometry):
         the interfaces. `facing` and `toward` select host endpoints in this
         model's frame. Applicable catalog-verified poses rank first within the
         selected endpoints. Other candidates use quarter-turn clocking where
-        permitted and seat sliding pairs within spans that fit the requested travel.
+        permitted, try both axis directions for revolute mounts without a requested
+        rotation, and seat sliding pairs within spans that fit the requested travel.
 
         Explicit `mountings`, `target_rotation`, and `target_position` use the
         same fitting as `connect`. To filter by movement, give a `motion` and

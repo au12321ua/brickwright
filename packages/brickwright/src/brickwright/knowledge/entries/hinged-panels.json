@@ -28,9 +28,12 @@
     "fold"
   ],
   "parts": [
-    "3023",
+    "3036",
+    "3005",
+    "3009",
     "4275b",
-    "4276b"
+    "4276b",
+    "3032"
   ],
   "diagnostics": [
     "connector.incompatible",
@@ -38,12 +41,12 @@
     "motion.disconnected"
   ],
   "steps": [
-    "Mount the fixed leaf to a solid landing. Keep brackets and spare studs away from the finger region, especially for a lid that passes close to the support.",
-    "Connect hinge_7_in on 4276b to hinge_7_on on 4275b. In the sample the mounting is clocked 180° to make a flat rest pose. Attach the panel to the moving leaf only, or a second rigid contact can lock the assembly.",
-    "Declare a revolute range relative to the rest pose. Inspect the sign of the opening angle and sample the full range with the frame in place. Use the pair and position in a collision result to decide where to offset the hinge or cut back the panel."
+    "Mount the fixed leaf on the frame. Build the moving leaf, panel and trim together in a separate LegoBuild so their full shape is present during trial.",
+    "Call find_connection_candidates on the fixed leaf with intent rotate, the complete hatch as content, its MotionRange, and an opening_toward direction. Set opening_point to a point on the panel away from the pivot.",
+    "Use trial_connections with the frame in place. Check the closed alignment and opening clearance, then place_connection with a passing candidate. If none pass, inspect the implicated parts and sample poses before adjusting the frame or mount."
   ],
   "example": "hinged_panels.py",
-  "expected": "The leaf opens 60° from flat, stays attached and supported, and clears the anchored leaf at seven samples.",
+  "expected": "The flat panel clears the crate wall, rises 60 degrees with the moving leaf, and stays attached at seven samples.",
   "sources": [
     {
       "author": "Carlos Antelo",
