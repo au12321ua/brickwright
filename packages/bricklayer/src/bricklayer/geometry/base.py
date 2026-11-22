@@ -194,6 +194,32 @@ class LegoGeometry:
                 for value in (facing.value if isinstance(facing, Direction) else facing)
             ]
         if not matches:
+            if isinstance(content, Element) and not content.connectors:
+                from ..parts.official import lookup_part, parts_with_connectors
+
+                part = lookup_part(content.ldraw_id)
+                capability = part.connectivity
+                if capability.reason_code == "missing_connector_annotations":
+                    evidence.update(
+                        {
+                            "version": part.version,
+                            "capability": "connectivity",
+                            "reason_code": capability.reason_code,
+                        }
+                    )
+                    if types:
+                        evidence["parts_with_connector"] = [
+                            part_id for part_id in parts_with_connectors(types)[:5]
+                        ]
+                    raise DiagnosticError(
+                        f"Part {part.part_id!r} has no connector annotations.",
+                        code="catalog.missing_data",
+                        evidence=evidence,
+                        next_action=(
+                            f"Inspect lookup_part({part.part_id!r}).connectivity, "
+                            "then choose a part with annotated endpoints."
+                        ),
+                    )
             raise DiagnosticError(
                 f"{self!r} has no {label} connector",
                 code="connector.not_found",
