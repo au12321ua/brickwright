@@ -143,6 +143,35 @@ def test_hatch_opens_up_sixty_degrees_and_trials_leave_state_unchanged():
     assert model.is_valid()
 
 
+def test_default_hinge_trials_find_the_reverse_mount_that_clears_a_crate_wall():
+    model = bl.LegoBuild()
+    model.add(bl.plate(8, 6), rotation=bl.Rotation.DEG_90)
+    model.add(bl.brick(1, 1), (2, 7, bl.PLATE))
+    model.add(bl.brick(6, 1), (0, 2, bl.PLATE))
+    fixed = model.add(part("4275b"), (2, 6, 1 + bl.PLATE), bl.Rotation.DEG_270)
+    hatch = bl.LegoBuild()
+    leaf = hatch.add(part("4276b"))
+    skin = hatch.stack(bl.plate(6, 4), leaf, (-2, -3, 0), bl.Rotation.DEG_270)
+    motion = bl.MotionRange(bl.Revolute(-90), bl.Revolute(0))
+
+    candidates = model.find_connection_candidates(
+        fixed,
+        "rotate",
+        content=hatch,
+        motion=motion,
+        opening_toward=bl.Direction.UP,
+        opening_point=skin.center,
+    )
+    passing = [
+        trial.candidate for trial in model.trial_connections(candidates) if trial.passed
+    ]
+    assert passing
+    assert passing[0].mounting == bl.Mounting(angle=180, flip=True)
+    mounted = model.place_connection(passing[0])
+    assert model.joint(mounted).motion == motion
+    assert model.is_connected() and model.check_motion(samples=31).passed
+
+
 def test_motion_interference_reports_sample_and_both_parts():
     model = bl.LegoBuild()
     model.add(part("4275b"), name="frame")

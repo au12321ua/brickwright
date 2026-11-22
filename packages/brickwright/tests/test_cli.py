@@ -2,6 +2,7 @@
 
 import re
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from typer.testing import CliRunner
@@ -523,7 +524,9 @@ class TestFinalize:
         # Deterministic per-command durations: validate Δ=1.0s, finalize Δ=0.5s.
         # perf_counter is called start/end once per timed command.
         ticks = iter([0.0, 1.0, 10.0, 10.5])
-        monkeypatch.setattr(cli.time, "perf_counter", lambda: next(ticks))
+        monkeypatch.setattr(
+            cli, "time", SimpleNamespace(perf_counter=lambda: next(ticks))
+        )
 
         record_id = _init(rd)
         assert ext("validate", record_id, "--records-dir", rd).exit_code == 0

@@ -605,8 +605,16 @@ def _mounting_candidates(
             }
             else (0,)
         )
+        flips = (
+            (False, True)
+            if kind is JointKind.REVOLUTE and options.target_rotation is None
+            else (False,)
+        )
         mountings = tuple(
-            Mounting(angle, offset) for offset in offsets for angle in angles
+            Mounting(angle, offset, flip=flip)
+            for flip in flips
+            for offset in offsets
+            for angle in angles
         )
     else:
         mountings = options.mountings

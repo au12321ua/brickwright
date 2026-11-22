@@ -1,0 +1,29 @@
+{
+  "protocol": "P-001/U-05/maestro-external-v2",
+  "repetitions": 2,
+  "primary_task_ids": [
+    "side-sign",
+    "lifting-hatch",
+    "spinning-wheel",
+    "adjustable-lamp",
+    "brick-wall"
+  ],
+  "process_measures": {
+    "first_passing_candidate": "One-based index in completed SDK trial_connections batches across authoring processes, in return and append order. Null when no passing trial was observed. Direct connect and manual geometry exploration are separate strategies and are outside this count.",
+    "inspected_candidates": "Total returned SDK trial candidates, including all candidates in the first passing batch and subsequent batches. Null when observation was unavailable.",
+    "failed_validation_snapshots": "Count of archived external validation snapshots with ok=false across the trial's records, before verifier replay."
+  },
+  "extra_tasks": [
+    {
+      "id": "recessed-hatch",
+      "prompt": "Build a tabletop cargo crate in at most 55 LEGO pieces. Leave a clear top opening at least 4 studs wide and 3 studs deep. A contrasting lid sits flat over the opening when closed. A fixed raised rail runs along the rear edge, at least one standard brick above the closed lid. Open the lid upward at its left edge, with its right edge staying at the crate. It must reach at least 75 degrees, leaving the opening accessible without touching the rear rail or moving the crate.",
+      "requirements": "At most 55 pieces. A horizontal contrasting lid covers a clear 4 by 3 stud or larger opening. The fixed rear rail spans the rear of the opening and stands at least one brick above the closed lid. The left edge rises while the right edge stays mounted. At 0, 15, 30, 45, 60 and 75 degrees the lid and rail clear one another, the crate stays put and the attachment holds."
+    },
+    {
+      "id": "two-axis-lamp",
+      "prompt": "Build a LEGO inspection lamp in at most 45 pieces, with a stable tabletop base and a bright head whose beam direction is visible. Without turning the base, aim it forward, 30 degrees up and down, and 45 degrees left and right. Also aim it 45 degrees left and 30 degrees up at the same time. The head must stay attached and clear of the stand throughout.",
+      "requirements": "At most 45 pieces. Stable fixed base and identifiable bright light face. Relative to forward, reach at least 30 degrees pitch in each direction and 45 degrees yaw in each direction; reach 45 degrees left with 30 degrees elevation in one pose. Check the direction of the head, fixed base, attachment and clearance at neutral, the four single-axis targets, and the compound target."
+    }
+  ],
+  "docker_image": "127.0.0.1:8425/maestro-prep/inst_01m5pymhfwe060d4khvvmpdxsf@sha256:a419655a8759c255848f6f431d495261c8407e3889a1866946f31e383b4fbd10"
+}
