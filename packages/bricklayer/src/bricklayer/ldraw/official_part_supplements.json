@@ -1,0 +1,355 @@
+{
+  "files": {
+    "p/1-16chrd.dat": {
+      "author": "Philippe Hurbain [Philo]",
+      "license": "Licensed under CC BY 4.0 : see CAreadme.txt",
+      "sha256": "e429dd760eb6f0cf460a74e6ebf52c023bedbdea82de7801efa1694b5a1a82e8"
+    },
+    "p/1-4con3.dat": {
+      "author": "Steve Bliss [sbliss]",
+      "license": "Licensed under CC BY 4.0 : see CAreadme.txt",
+      "sha256": "c68d5c616332fbf15f3f22519bab843bdb897bf29e28709fb02ef2dcd63a0e2f"
+    },
+    "p/1-4edge.dat": {
+      "author": "James Jessiman",
+      "license": "Licensed under CC BY 4.0 : see CAreadme.txt",
+      "sha256": "9ce2de7e67bbac575d52cfdc771b9d00856efc9b88002d97db8e665e50f4d467"
+    },
+    "p/1-4ndis.dat": {
+      "author": "James Jessiman",
+      "license": "Licensed under CC BY 4.0 : see CAreadme.txt",
+      "sha256": "ff6685838636e7ab6152356d8f09e4f00a38af0d878b0881423f5c45fb868f0c"
+    },
+    "p/1-8con3.dat": {
+      "author": "Willy Tschager [Holly-Wood]",
+      "license": "Licensed under CC BY 4.0 : see CAreadme.txt",
+      "sha256": "f964c471284eb4dafa0e9668bfc5721b6d299e4decb1c3ed268d0bc01b08130c"
+    },
+    "p/1-8edge.dat": {
+      "author": "James Jessiman",
+      "license": "Licensed under CC BY 4.0 : see CAreadme.txt",
+      "sha256": "50436a0bce461198c342dccbccb658a1bffae13e44b7c48689b158c946c2c2ab"
+    },
+    "p/1-8tndis.dat": {
+      "author": "Massimo Maso [Sirio]",
+      "license": "Licensed under CC BY 4.0 : see CAreadme.txt",
+      "sha256": "5e3bd48d2e7565fc97a8936255339d9682897b43a38f69da43571f42a4a2248e"
+    },
+    "p/3-16edge.dat": {
+      "author": "Donald Sutter [technog]",
+      "license": "Licensed under CC BY 4.0 : see CAreadme.txt",
+      "sha256": "c08dd83bb7fe90b61f7cd0b10ebef0d9a9ba33b497676dedd2e2e968cb8248f9"
+    },
+    "p/3-16ring2.dat": {
+      "author": "Philippe Hurbain [Philo]",
+      "license": "Licensed under CC BY 4.0 : see CAreadme.txt",
+      "sha256": "39481beacecc688590dff4d877e177657d133fbaee449ad60f346c18ccce3d3d"
+    },
+    "p/4-4con3.dat": {
+      "author": "Niels Karsdorp [nielsk]",
+      "license": "Licensed under CC BY 4.0 : see CAreadme.txt",
+      "sha256": "1aed96f9d90a36758bb299c01db21f8fd795a4734bcd605171c76ea61116697e"
+    },
+    "p/4-4cyli.dat": {
+      "author": "James Jessiman",
+      "license": "Licensed under CC BY 4.0 : see CAreadme.txt",
+      "sha256": "4a742c2765b6ebf98245baaf8a160a4ff587fc93d36c8ee2b9074712a2f968c4"
+    },
+    "p/4-4cylo.dat": {
+      "author": "Mark Kennedy [mkennedy]",
+      "license": "Licensed under CC BY 4.0 : see CAreadme.txt",
+      "sha256": "d6ca97ee2e75918b3309a5c88aafcd2455b3a316f7cef8963517c19f1d86b38f"
+    },
+    "p/4-4disc.dat": {
+      "author": "James Jessiman",
+      "license": "Licensed under CC BY 4.0 : see CAreadme.txt",
+      "sha256": "a00b5547776f61a7389d303616987c76b3c4de86ad8ec32f22857e1bd5e5e40f"
+    },
+    "p/4-4edge.dat": {
+      "author": "James Jessiman",
+      "license": "Licensed under CC BY 4.0 : see CAreadme.txt",
+      "sha256": "54a52196e421fd1717d291ff52ea57553b1fb238907c1678cc1f1a84c698b1da"
+    },
+    "p/4-4ering.dat": {
+      "author": "Philippe Hurbain [Philo]",
+      "license": "Licensed under CC BY 4.0 : see CAreadme.txt",
+      "sha256": "115b0158afebc9307ba47cb35673b26d97a1fa1a2d362f9b389d89aea703b72d"
+    },
+    "p/4-4ring17.dat": {
+      "author": "Willy Tschager [Holly-Wood]",
+      "license": "Licensed under CC BY 4.0 : see CAreadme.txt",
+      "sha256": "e5f8536e70b7a76b77469f5d57406d23d9aa9f325233e0cba25effbd39336403"
+    },
+    "p/4-4ring2.dat": {
+      "author": "James Jessiman",
+      "license": "Licensed under CC BY 4.0 : see CAreadme.txt",
+      "sha256": "6fb38804b1f5e9bee8c0b80caf1397b09454fc58b048dc19045b6f37c8762ab0"
+    },
+    "p/8/1-4chrd.dat": {
+      "author": "Magnus Forsberg [MagFors]",
+      "license": "Licensed under CC BY 4.0 : see CAreadme.txt",
+      "sha256": "dc080d295da1d9732d9346882608078f6b32c4cf75d2a6174ecc16fdcf1e20c9"
+    },
+    "p/8/1-4cyli.dat": {
+      "author": "Philippe Hurbain [Philo]",
+      "license": "Licensed under CC BY 4.0 : see CAreadme.txt",
+      "sha256": "a9e8266ebf4bdb75f8ac643596e29e3069cc88697a379e4b116fa59b1c138bbf"
+    },
+    "p/8/1-4cyls.dat": {
+      "author": "Philippe Hurbain [Philo]",
+      "license": "Licensed under CC BY 4.0 : see CAreadme.txt",
+      "sha256": "c4cb59937f09c2c106bafd2c971302d8319247180e1dd0e9a010e1b34cfc4ada"
+    },
+    "p/8/1-4edge.dat": {
+      "author": "Philippe Hurbain [Philo]",
+      "license": "Licensed under CC BY 4.0 : see CAreadme.txt",
+      "sha256": "841b1c8c1e48553b010ba25fde8e9ef1ea959c1ac83c7c7b6dae7277fbee4a35"
+    },
+    "p/8/1-4ndis.dat": {
+      "author": "Magnus Forsberg [MagFors]",
+      "license": "Licensed under CC BY 4.0 : see CAreadme.txt",
+      "sha256": "c47a4b0165bfffb084112a6703f4dc1641fdea7c3c68337a4b745223cf400ce2"
+    },
+    "p/8/1-8sphe.dat": {
+      "author": "Magnus Forsberg [MagFors]",
+      "license": "Licensed under CC BY 4.0 : see CAreadme.txt",
+      "sha256": "e3227b1d5255603bae9963eb4f5c464063743d62f78acccb712008358b47f6f7"
+    },
+    "p/8/2-4chrd.dat": {
+      "author": "Magnus Forsberg [MagFors]",
+      "license": "Licensed under CC BY 4.0 : see CAreadme.txt",
+      "sha256": "2caebc5de687f190e7ef2f25724665284bf0139e4db42844d0e2691128b9c0ea"
+    },
+    "p/8/2-4cyli.dat": {
+      "author": "Philippe Hurbain [Philo]",
+      "license": "Licensed under CC BY 4.0 : see CAreadme.txt",
+      "sha256": "9e5869a3bf444fcda1cc9908ef96ce782b53fc68f94eaf6903a0dbca6c582215"
+    },
+    "p/8/2-4cyls.dat": {
+      "author": "Gerald Lasser [GeraldLasser]",
+      "license": "Licensed under CC BY 4.0 : see CAreadme.txt",
+      "sha256": "8a6c1df8f1b3f2277cdc652e9174cad62295424ce2f63bccb64a337bb056bba4"
+    },
+    "p/8/2-4edge.dat": {
+      "author": "Philippe Hurbain [Philo]",
+      "license": "Licensed under CC BY 4.0 : see CAreadme.txt",
+      "sha256": "3154ed3f142d644552b2533457c13c56ef326b0f7d31ea425585d6cdde2a3129"
+    },
+    "p/axl3end.dat": {
+      "author": "Max Martin Richter [MMR1988]",
+      "license": "Licensed under CC BY 4.0 : see CAreadme.txt",
+      "sha256": "ddd86ab03d4dd793e3c785396c66ebb5aaf5eec2831bba1f6e1ca0a7497c99e0"
+    },
+    "p/axl3hole.dat": {
+      "author": "J.C. Tchang [tchang]",
+      "license": "Licensed under CC BY 4.0 : see CAreadme.txt",
+      "sha256": "eb2369c61af0f2e3c2bf85f0f23ca92d5d313719941f0f8ff4eabde4b131ba7e"
+    },
+    "p/clh15.dat": {
+      "author": "Magnus Forsberg [MagFors]",
+      "license": "Licensed under CC BY 4.0 : see CAreadme.txt",
+      "sha256": "3fbeee5f6eff31777d2cfeea515eaab528076db902758c355a161c3c35c78a35"
+    },
+    "p/clh5.dat": {
+      "author": "Donald Sutter [technog]",
+      "license": "Licensed under CC BY 4.0 : see CAreadme.txt",
+      "sha256": "59ec2d905654c3b10be647eafa439a14668d7ec429b10366466a643de995b7a5"
+    },
+    "p/clh5s.dat": {
+      "author": "Magnus Forsberg [MagFors]",
+      "license": "Licensed under CC BY 4.0 : see CAreadme.txt",
+      "sha256": "8fa12719b1af6f1b263ebb911869b4d951cf3ce550300b6a74b42600072f1239"
+    },
+    "p/empty.dat": {
+      "author": "Steffen [Steffen]",
+      "license": "Licensed under CC BY 4.0 : see CAreadme.txt",
+      "sha256": "192c9b9ee2e425cfbc9e9b12ff61ee0f05ae1cb0c12dc37d5590adb6abb65128"
+    },
+    "p/rect1.dat": {
+      "author": "Chris Dee [cwdee]",
+      "license": "Licensed under CC BY 4.0 : see CAreadme.txt",
+      "sha256": "48fdcd3181587b4bdc89d356a5aee21268688f3f2fcdd4d6f5c1a3d49b1a1ceb"
+    },
+    "p/rect2p.dat": {
+      "author": "Donald Sutter [technog]",
+      "license": "Licensed under CC BY 4.0 : see CAreadme.txt",
+      "sha256": "faac2b36241a9de0c0108471e59c45734df6c79813332d9cacf97f6391886acc"
+    },
+    "parts/2650.dat": {
+      "author": "Bernd Broich [bbroich]",
+      "license": "Licensed under CC BY 4.0 : see CAreadme.txt",
+      "sha256": "35bca1dd330c29089cbe72bca9ae5d85d9b699f0e8877a5025189351e7fbdba8"
+    },
+    "parts/2651.dat": {
+      "author": "Bernd Broich [bbroich]",
+      "license": "Licensed under CC BY 4.0 : see CAreadme.txt",
+      "sha256": "c17a0c9c569b911ad4984014ccbe2ffcd29f97af9a454d1676a9a481fea581bb"
+    },
+    "parts/2651c01-f1.dat": {
+      "author": "Bernd Broich [bbroich]",
+      "license": "Licensed under CC BY 4.0 : see CAreadme.txt",
+      "sha256": "66b014825ce5efed43da23502a0e4548dc46a9726749138a2ffbfd8951b14438"
+    },
+    "parts/2651c01-f2.dat": {
+      "author": "Bernd Broich [bbroich]",
+      "license": "Licensed under CC BY 4.0 : see CAreadme.txt",
+      "sha256": "638c0203f1b39a7cf7aa039aee31f0d65b29d8b7718aac9bcb3c70efa55e023a"
+    },
+    "parts/30553.dat": {
+      "author": "Franklin W. Cain [fwcain]",
+      "license": "Licensed under CC BY 4.0 : see CAreadme.txt",
+      "sha256": "9782834881d46b20188821fd78bd35cca17b0774fcdc1ea2f547fd17a76fb490"
+    },
+    "parts/53923.dat": {
+      "author": "Max Martin Richter [MMR1988]",
+      "license": "Licensed under CC BY 4.0 : see CAreadme.txt",
+      "sha256": "78999c0bf9bc218f382ac922468aaf299a45e88dfbb763525038c994f59315af"
+    },
+    "parts/s/480s02.dat": {
+      "author": "Franklin W. Cain [fwcain]",
+      "license": "Licensed under CC BY 4.0 : see CAreadme.txt",
+      "sha256": "e0118f178951b4a82bed0b63c831ae9843cb9d8c7d9d0630608eb8a10a96e9b1"
+    }
+  },
+  "ldraw_version": "2026-10",
+  "parts": {
+    "2650": {
+      "connectors": {
+        "hook_slide_channel": {
+          "files": [
+            "parts/2650.dat",
+            "parts/2651c01-f1.dat",
+            "parts/2651c01-f2.dat"
+          ],
+          "method": "Measured in the channel on its local +X rail axis. The reference pose is halfway between both shortcuts."
+        }
+      }
+    },
+    "2651": {
+      "connectors": {
+        "hook_slide_arm": {
+          "files": [
+            "parts/2651.dat",
+            "parts/2651c01-f1.dat",
+            "parts/2651c01-f2.dat"
+          ],
+          "method": "Measured in the tab on its local +X rail axis."
+        }
+      }
+    },
+    "53923": {
+      "collider": {
+        "files": [
+          "p/1-16chrd.dat",
+          "p/1-4con3.dat",
+          "p/1-4edge.dat",
+          "p/1-4ndis.dat",
+          "p/1-8con3.dat",
+          "p/1-8edge.dat",
+          "p/1-8tndis.dat",
+          "p/3-16edge.dat",
+          "p/3-16ring2.dat",
+          "p/4-4con3.dat",
+          "p/4-4cyli.dat",
+          "p/4-4cylo.dat",
+          "p/4-4disc.dat",
+          "p/4-4edge.dat",
+          "p/4-4ering.dat",
+          "p/4-4ring17.dat",
+          "p/4-4ring2.dat",
+          "p/8/1-4chrd.dat",
+          "p/8/1-4cyli.dat",
+          "p/8/1-4cyls.dat",
+          "p/8/1-4edge.dat",
+          "p/8/1-4ndis.dat",
+          "p/8/1-8sphe.dat",
+          "p/8/2-4chrd.dat",
+          "p/8/2-4cyli.dat",
+          "p/8/2-4cyls.dat",
+          "p/8/2-4edge.dat",
+          "p/axl3end.dat",
+          "p/axl3hole.dat",
+          "p/clh15.dat",
+          "p/empty.dat",
+          "p/rect1.dat",
+          "p/rect2p.dat",
+          "parts/53923.dat"
+        ],
+        "frame_sha256": "94325b4d5693b53974787be9bda38fb5388b183c483ee3b9c152a9e593ebf5a4",
+        "inset_ldu": 0.25,
+        "method": "Inset occupancy surface at 0.15 LDU resolution from the official triangles.",
+        "source_to_part_ldraw": [
+          0,
+          0,
+          0,
+          1,
+          0,
+          0,
+          0,
+          1,
+          0,
+          0,
+          0,
+          1
+        ],
+        "voxel_size_ldu": 0.15
+      },
+      "connectors": {
+        "axle_hole": {
+          "files": [
+            "parts/53923.dat",
+            "p/axl3hole.dat"
+          ],
+          "method": "Measured the axle hole center along its 20 LDU axis."
+        },
+        "hinge_2_in": {
+          "files": [
+            "parts/53923.dat",
+            "p/clh15.dat"
+          ],
+          "method": "Measured the center and axis of the single finger pivot."
+        }
+      }
+    }
+  },
+  "shortcut_poses": {
+    "2651c01-f1": {
+      "anchor": "2650",
+      "moving": "2651",
+      "relative_ldraw": [
+        -76.0,
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "source": "parts/2651c01-f1.dat"
+    },
+    "2651c01-f2": {
+      "anchor": "2650",
+      "moving": "2651",
+      "relative_ldraw": [
+        -113.0,
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "source": "parts/2651c01-f2.dat"
+    }
+  }
+}
