@@ -29,6 +29,7 @@ from .driver.external_critique import (
 )
 from .driver.gallery import print_gallery
 from .driver.tracking import tally_failure
+from .knowledge import read_knowledge, search_knowledge
 from .prompts import system_prompt
 from .record import Record, Timing, ValidationFailures, list_records
 from .tools import FinalizationReport, RenderReport, ValidationReport
@@ -50,6 +51,12 @@ external_app = typer.Typer(
     no_args_is_help=True,
 )
 app.add_typer(external_app, name="external")
+
+knowledge_app = typer.Typer(
+    help="Search and read local building knowledge.",
+    no_args_is_help=True,
+)
+app.add_typer(knowledge_app, name="knowledge")
 
 RecordsDir = Annotated[
     Path,
@@ -143,6 +150,30 @@ CritiqueInstructionsRounds = Annotated[
         "--critique-rounds", help="rounds the printed critique playbook advises"
     ),
 ]
+
+
+@knowledge_app.command(name="search")
+def knowledge_search(
+    query: Annotated[
+        str, typer.Argument(help="build task, part ID, or diagnostic code")
+    ],
+    limit: Annotated[int, typer.Option(min=1, help="maximum number of entries")] = 3,
+) -> None:
+    """Find applicable building guides and print their summaries as JSON."""
+    print(search_knowledge(query, limit=limit).model_dump_json(indent=2))
+
+
+@knowledge_app.command(name="show")
+def knowledge_show(
+    entry_id: Annotated[str, typer.Argument(help="knowledge entry ID")],
+) -> None:
+    """Print a guide with its example and sources as JSON."""
+    try:
+        entry = read_knowledge(entry_id)
+    except KeyError as exc:
+        typer.echo(f"Unknown knowledge entry {entry_id!r}.", err=True)
+        raise typer.Exit(1) from exc
+    print(entry.model_dump_json(indent=2))
 
 
 @app.command()

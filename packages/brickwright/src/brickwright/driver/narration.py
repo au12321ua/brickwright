@@ -81,6 +81,8 @@ _TOOL_LOOK: dict[str, tuple[str, str]] = {
     "render": ("render", "cyan"),
     "finalize": ("finalize", "green"),
     "dispatch_subagents": ("dispatch", "black"),
+    "search_building_knowledge": ("search guides", "cyan"),
+    "read_building_knowledge": ("read guide", "blue"),
 }
 
 # How wide a one-line code/snippet gloss may get before it is clipped.
@@ -144,6 +146,10 @@ def _call_summary(name: str, arguments: dict[str, Any]) -> str:
     if name == "multi_edit_build":
         edits = arguments.get("edits")
         return f"{len(edits) if isinstance(edits, list) else 0} edits"
+    if name == "search_building_knowledge":
+        return _shorten(str(arguments.get("query", "")))
+    if name == "read_building_knowledge":
+        return _shorten(str(arguments.get("entry_id", "")))
     if name == "explore":
         return _shorten(str(arguments.get("code", "")))
     if name == "dispatch_subagents":
@@ -180,6 +186,11 @@ def _outcome_summary(name: str, outcome: Any) -> str:
     content = outcome.content
     if name == "read_build" and outcome.ok:
         return f"{len(content.splitlines())} lines"
+    if name == "search_building_knowledge" and outcome.ok:
+        search = json.loads(content)
+        return search["message"] or f"{len(search['matches'])} matching guides"
+    if name == "read_building_knowledge" and outcome.ok:
+        return json.loads(content)["title"]
     if name == "explore":
         if not outcome.ok:
             return _last_line(content)

@@ -74,6 +74,24 @@ class ExploreArgs(ToolArgs):
     )
 
 
+class SearchBuildingKnowledgeArgs(ToolArgs):
+    """Find relevant local guides with examples for choosing a building technique,
+    meeting a design requirement, or repairing a failure."""
+
+    query: str = Field(
+        description="build task description, part ID, or exact diagnostic code"
+    )
+    limit: int = Field(
+        default=3, ge=1, description="maximum number of guides to return"
+    )
+
+
+class ReadBuildingKnowledgeArgs(ToolArgs):
+    """Read a local building guide's steps, runnable example, expected checks, and sources."""
+
+    entry_id: str = Field(description="guide ID returned by search_building_knowledge")
+
+
 Azimuth = Annotated[
     float,
     Field(
