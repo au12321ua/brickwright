@@ -57,7 +57,8 @@ Run `brickwright generate --help` for more options.
 ### Building knowledge
 
 Search the bundled guides by build task, part ID, or diagnostic code. Open a matching
-ID to get the steps, runnable example, expected checks, and sources.
+ID to get the steps, runnable example, expected checks, and sources. Searches with a
+part ID in the guides also report that part’s capabilities from the installed catalog.
 
 ```sh
 brickwright knowledge search 'a hatch that hits the surrounding bodywork'
