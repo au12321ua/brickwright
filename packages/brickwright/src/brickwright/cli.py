@@ -29,9 +29,11 @@ from .driver.external_critique import (
 )
 from .driver.gallery import print_gallery
 from .driver.tracking import tally_failure
+from .knowledge import read_knowledge, search_knowledge
 from .prompts import system_prompt
 from .record import Record, Timing, ValidationFailures, list_records
-from .tools import FinalizationReport, RenderReport, ValidationReport
+from .tools import FinalizationReport, RenderReport, SnippetResult, ValidationReport
+from .tools import explore as explore_record
 from .tools import finalize as finalize_record
 from .tools import render as render_record
 from .tools import render_angle as render_angle_record
@@ -50,6 +52,12 @@ external_app = typer.Typer(
     no_args_is_help=True,
 )
 app.add_typer(external_app, name="external")
+
+knowledge_app = typer.Typer(
+    help="Search and read local building knowledge.",
+    no_args_is_help=True,
+)
+app.add_typer(knowledge_app, name="knowledge")
 
 RecordsDir = Annotated[
     Path,
@@ -143,6 +151,30 @@ CritiqueInstructionsRounds = Annotated[
         "--critique-rounds", help="rounds the printed critique playbook advises"
     ),
 ]
+
+
+@knowledge_app.command(name="search")
+def knowledge_search(
+    query: Annotated[
+        str, typer.Argument(help="build task, part ID, or diagnostic code")
+    ],
+    limit: Annotated[int, typer.Option(min=1, help="maximum number of entries")] = 3,
+) -> None:
+    """Find applicable building guides and print their summaries as JSON."""
+    print(search_knowledge(query, limit=limit).model_dump_json(indent=2))
+
+
+@knowledge_app.command(name="show")
+def knowledge_show(
+    entry_id: Annotated[str, typer.Argument(help="knowledge entry ID")],
+) -> None:
+    """Print a guide with its example and sources as JSON."""
+    try:
+        entry = read_knowledge(entry_id)
+    except KeyError as exc:
+        typer.echo(f"Unknown knowledge entry {entry_id!r}.", err=True)
+        raise typer.Exit(1) from exc
+    print(entry.model_dump_json(indent=2))
 
 
 @app.command()
@@ -295,6 +327,26 @@ def validate(
 
 
 @external_app.command()
+def explore(
+    record_id: RecordId,
+    code: Annotated[
+        str,
+        typer.Option(
+            help="Python snippet to run with bricklayer and, when referenced, build"
+        ),
+    ],
+    records_dir: RecordsDir = Path(DEFAULT_RECORDS_DIR),
+    timeout: BuildTimeout = _DEFAULTS.build_timeout,
+) -> None:
+    """Inspect the catalog or the record's build and print its JSON result."""
+    config = Config(records_dir=records_dir, build_timeout=timeout)
+    record = Record.load(config, record_id)
+    with _track_command(record, "explore"):
+        result = explore_record(record, code, config)
+    _print_report(result)
+
+
+@external_app.command()
 def finalize(
     record_id: RecordId,
     records_dir: RecordsDir = Path(DEFAULT_RECORDS_DIR),
@@ -430,7 +482,7 @@ def _print_image_and_report(report: RenderReport) -> None:
 
 
 def _print_report(
-    report: ValidationReport | FinalizationReport | RenderReport,
+    report: ValidationReport | FinalizationReport | RenderReport | SnippetResult,
 ) -> None:
     """Print the report as JSON and exit nonzero if the operation failed."""
     print(report.model_dump_json(indent=2))

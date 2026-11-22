@@ -3,7 +3,9 @@
 from collections.abc import Iterable
 from functools import cached_property
 from math import ceil, floor
+from typing import TYPE_CHECKING
 
+from ..diagnostics import DiagnosticError, connector_evidence
 from .connections import (
     STUD_FAMILY,
     Connector,
@@ -12,6 +14,9 @@ from .connections import (
 )
 from .linalg import Scalar, Vec3, dot, is_aligned, is_unit, vec_max, vec_min
 from .spatial import Direction, Position, Rotation, as_position
+
+if TYPE_CHECKING:
+    from pydantic import JsonValue
 
 
 class LegoGeometry:
@@ -169,13 +174,64 @@ class LegoGeometry:
         label = (
             "matching" if types is None else " or ".join(sorted(t.name for t in types))
         )
+        if matches and (len(matches) == 1 or toward is not None):
+            return matches[0]
+
+        from ..modeling.placement import Placement
+        from ..parts.element import Element
+
+        content = self.content if isinstance(self, Placement) else self
+        evidence: dict[str, JsonValue] = {
+            "type": label,
+            "matches": len(matches),
+            "candidates": [connector_evidence(connector) for connector in matches[:20]],
+        }
+        if isinstance(content, Element):
+            evidence["part_id"] = content.ldraw_id
+        if facing is not None:
+            evidence["facing"] = [
+                float(value)
+                for value in (facing.value if isinstance(facing, Direction) else facing)
+            ]
         if not matches:
-            raise ValueError(f"{self!r} has no {label} connector")
-        if len(matches) > 1 and toward is None:
-            raise ValueError(
-                f"{label} is ambiguous on {self!r}: it has {len(matches)} such connectors"
+            if isinstance(content, Element) and not content.connectors:
+                from ..parts.official import lookup_part, parts_with_connectors
+
+                part = lookup_part(content.ldraw_id)
+                capability = part.connectivity
+                if capability.reason_code == "missing_connector_annotations":
+                    evidence.update(
+                        {
+                            "version": part.version,
+                            "capability": "connectivity",
+                            "reason_code": capability.reason_code,
+                        }
+                    )
+                    if types:
+                        evidence["parts_with_connector"] = [
+                            part_id for part_id in parts_with_connectors(types)[:5]
+                        ]
+                    raise DiagnosticError(
+                        f"Part {part.part_id!r} has no connector annotations.",
+                        code="catalog.missing_data",
+                        evidence=evidence,
+                        next_action=(
+                            f"Inspect lookup_part({part.part_id!r}).connectivity, "
+                            "then choose a part with annotated endpoints."
+                        ),
+                    )
+            raise DiagnosticError(
+                f"{self!r} has no {label} connector",
+                code="connector.not_found",
+                evidence=evidence,
+                next_action="Use find_connectors() on this geometry to inspect the available types and directions.",
             )
-        return matches[0]
+        raise DiagnosticError(
+            f"{label} is ambiguous on {self!r}: it has {len(matches)} such connectors",
+            code="connector.ambiguous",
+            evidence=evidence,
+            next_action="Use find_connectors() to inspect the matches, then pass toward or facing to select the intended endpoint.",
+        )
 
 
 def _connector_order(c: Connector) -> tuple[Scalar, ...]:

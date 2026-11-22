@@ -23,6 +23,47 @@ assert model.is_valid()  # no collisions, nothing floating
 bl.write_ldraw(model, "tower.ldr")  # open in any LDraw viewer
 ```
 
+## Official part queries
+
+`lookup_part` and `search_official_parts` cover every top-level ID in the bundled
+LDraw 2026-10 index. Each result gives its source, related IDs, and separate
+statuses for visual geometry, construction, collision meshes, and endpoints.
+These queries run offline with the SDK package.
+
+```python
+visual = bl.lookup_part("102525")
+assert visual.geometry.available
+assert visual.constructible.reason_code == "missing_collision_mesh"
+
+hinges = bl.search_official_parts("hinge plate", constructible=True, connectivity=True)
+side_studs = bl.lookup_part("11211").endpoints
+hook_mountings = bl.lookup_part("2651").verified_mountings
+```
+
+Endpoint positions use studs on x/y and bricks on z in the part's local frame.
+Each endpoint also carries its raw LDraw position in LDU, its frame transform,
+and its annotation source. `PartSpec`, `Element`, and `search_parts` use the
+SDK modeling catalog.
+
+Verified mountings give the two part IDs, endpoint indices, a relative pose,
+and the scope of the physical checks. Legacy collision records identify the
+exact packaged mesh frame. Upstream mesh donors and transforms are unrecorded
+for those frames.
+
+With the frozen LDraw 2026-10 tree available, these commands check the generated
+hinge geometry and reference poses, then compare the bundled index with its
+source data. The second command writes a report of changed and missing entries.
+
+```sh
+python -m bricklayer.ldraw.scripts.extract_official_part_supplements --ldraw /path/to/ldraw --check
+python -m bricklayer.ldraw.scripts.extract_official_catalog --ldraw /path/to/ldraw --check --report catalog-report.json
+```
+
+After changing modeling data with `extract-part-data`, run the two release
+commands in the order shown, omitting `--check` to write the updated files.
+The catalog command also accepts `--compare before.json after.json` to compare
+two index files offline. The index includes the source tree and member checksums.
+
 ## API reference
 
 For the full API reference, see `bricklayer.api_reference()` or run the following command:

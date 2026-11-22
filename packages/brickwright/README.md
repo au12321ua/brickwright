@@ -54,6 +54,20 @@ if set).
 
 Run `brickwright generate --help` for more options.
 
+### Building knowledge
+
+Search the bundled guides by build task, part ID, or diagnostic code. Open a matching
+ID to get the steps, runnable example, expected checks, and sources. Searches with a
+part ID in the guides also report that part’s capabilities from the installed catalog.
+
+```sh
+brickwright knowledge search 'a hatch that hits the surrounding bodywork'
+brickwright knowledge show aircraft-wing-and-hatch
+```
+
+The same search and read operations are available in Python as `search_knowledge` and
+`read_knowledge` from `brickwright.knowledge`.
+
 ---
 
 *LEGO® is a trademark of the LEGO Group, which does not sponsor, authorize, or endorse this project.*

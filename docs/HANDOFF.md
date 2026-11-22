@@ -14,5 +14,13 @@
 无此库时，仍可验证结构和导出 LDraw。默认生成记录保存在仓库忽略的 `records/`。
 
 修改模型校验或产物时，同时查看 [验证与导出设计](design/validation-and-export.md)。
-连接驱动装配与执行错误反馈、搭建知识库、LDraw 2026-10 零件覆盖已确认并进入开发，
-见[提案索引与并行开发约定](proposals/README.md)。索引列出三条线的接口和共享的开发前可行性检查。
+
+## 连接装配、知识查询和零件覆盖
+
+- 从搭建意图查件可用 `bricklayer.find_connection_pairs`。已有模型可用 `find_connection_candidates` 查安装姿态，`trial_connections` 试装，`place_connection` 提交。内置代理和外部代理可收到同一组执行原因码、现场证据和修复建议。[连接驱动装配提案](proposals/P-001-connection-driven-building.md)
+- 搭建问题、零件号和诊断码可交给 `brickwright knowledge search`，再用 `brickwright knowledge show` 读取步骤、可执行示例和来源。[知识库验收结果](proposals/archive/P-002-construction-knowledge.md#实现与验收结果)
+- `bricklayer.lookup_part` 可离线查询 LDraw 2026-10 的全部 24,985 个官方顶层 ID，返回建模及碰撞能力、端点、已验证安装姿态或数据缺项。[覆盖统计与数据限制](proposals/archive/P-003-official-part-coverage.md#实现与验收结果)
+
+P-001 的真实新旧代理对照按用户安排另行运行。五道任务与盲评量表已纳入仓库。用改动前的 `598cd99` 作旧版工作树，另取含三条实现的干净提交作新版工作树。冻结同一模型和预算后运行，保留成品、逐题实际用量和评分。[配对评测说明](design/p001-paired-evaluation.md)
+
+本次集成的 pytest 在启用冻结清单比对后通过 3,069 项，跳过 6 项。用本地 LDraw 库单独复跑其中两项渲染测试均通过，其余为三项需要原始 BrickNet 输入的提取测试和一项真实模型测试。两套发布数据生成器的 `--check`、Ruff 和 ty 均通过。从两个 wheel 在仓库外重查了官方全集，并试装了能通过五个姿态采样的铰链。

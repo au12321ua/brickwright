@@ -1,0 +1,57 @@
+{
+  "id": "hinged-panels",
+  "title": "Anchor a hinged panel and verify its opening direction",
+  "applicability": "Use for hinged lids, panels or hatches when the same pivot must stay engaged through a defined opening range. Use complementary hinge leaves with a defined axis.",
+  "aliases": [
+    "finger hinge",
+    "flip-up lid",
+    "swinging hatch",
+    "hinged roof",
+    "活动铰链",
+    "翻盖转轴",
+    "活动面板",
+    "舱门翻开",
+    "选铰链"
+  ],
+  "topics": [
+    "hatch",
+    "doors",
+    "articulation",
+    "lid",
+    "铰链"
+  ],
+  "actions": [
+    "hinge",
+    "swing",
+    "open",
+    "rotate",
+    "fold"
+  ],
+  "parts": [
+    "3023",
+    "4275b",
+    "4276b"
+  ],
+  "diagnostics": [
+    "connector.incompatible",
+    "motion.collision",
+    "motion.disconnected"
+  ],
+  "steps": [
+    "Mount the fixed leaf to a solid landing. Keep brackets and spare studs away from the finger region, especially for a lid that passes close to the support.",
+    "Connect hinge_7_in on 4276b to hinge_7_on on 4275b. In the sample the mounting is clocked 180° to make a flat rest pose. Attach the panel to the moving leaf only, or a second rigid contact can lock the assembly.",
+    "Declare a revolute range relative to the rest pose. Inspect the sign of the opening angle and sample the full range with the frame in place. Use the pair and position in a collision result to decide where to offset the hinge or cut back the panel."
+  ],
+  "example": "hinged_panels.py",
+  "expected": "The leaf opens 60° from flat, stays attached and supported, and clears the anchored leaf at seven samples.",
+  "sources": [
+    {
+      "author": "Carlos Antelo",
+      "title": "Openable cabin roof study",
+      "url": "https://github.com/anteloc/ldraw-nova/blob/d1e93d73f6ffe6955caa90953a98a0c90fbd5c5c/examples/6392-hinged-cabin-roof/GUIDE.md",
+      "license": "CC BY-SA 4.0",
+      "adaptation": "Reference only. The cabin roof study suggested demonstrating the fixed side separately from the moving cover. The BrickWright guidance and example are original.",
+      "attribution_url": "https://github.com/anteloc/ldraw-nova/blob/d1e93d73f6ffe6955caa90953a98a0c90fbd5c5c/ATTRIBUTION.md"
+    }
+  ]
+}

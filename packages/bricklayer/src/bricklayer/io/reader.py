@@ -33,6 +33,7 @@ from ..ldraw.library import ImportLibrary
 from ..modeling.build import LegoBuild
 from ..parts.catalog import part_exists
 from ..parts.element import Element
+from ..parts.official import lookup_part
 
 _Palette = dict[int, Color | LDrawColor]
 _COLORS: _Palette = {color.ldraw_id: color for color in Color}
@@ -289,9 +290,12 @@ class _Reader:
             part_id, offset = redirect
             pose = pose.compose(offset)
         if not part_exists(part_id):
-            self.skips.record(
-                "skipped", f"uncatalogued part {target.removesuffix('.dat')!r}"
-            )
+            original_id = target.removesuffix(".dat")
+            part = lookup_part(original_id)
+            cause = f"uncatalogued part {original_id!r}"
+            if part.in_version:
+                cause = f"{cause}. {part.constructible.reason}"
+            self.skips.record("skipped", cause)
             return
         element_pose = partdata.record(part_id).element_pose(pose)
         model.add_raw(Element(part_id, color), element_pose)

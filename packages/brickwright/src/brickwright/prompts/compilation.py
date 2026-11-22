@@ -12,7 +12,18 @@ def system_prompt(config: Config | None = None, *, external: bool = False) -> st
     from bricklayer import api_reference
 
     is_subagent = config is not None and config.is_subagent
-    parts = [_get_prompt("general_instructions")]
+    search = (
+        "`brickwright knowledge search <query>`"
+        if external
+        else "`search_building_knowledge`"
+    )
+    read = (
+        "`brickwright knowledge show <id>`" if external else "`read_building_knowledge`"
+    )
+    parts = [
+        _get_prompt("general_instructions"),
+        _get_prompt("building_knowledge").format(search=search, read=read),
+    ]
     if not external:
         internal = _get_prompt("internal_agent_instructions")
         internal = internal.replace("{tool_descriptions}", _tool_descriptions(config))

@@ -17,7 +17,7 @@ connector-type registry its connectors decode against
 from __future__ import annotations
 
 import json
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from functools import cache, cached_property
 from typing import Any
@@ -197,6 +197,11 @@ class PartRecord:
         """:attr:`connectors` as a set, shared by every element of this part."""
         return frozenset(self.connectors)
 
+    @property
+    def raw_connectors(self) -> tuple[ConnectorRaw, ...]:
+        """The LDraw data rows in the same order as the element's connectors."""
+        return self._connectors
+
     @cached_property
     def _connectors_raw_frame(self) -> tuple[Connector, ...]:
         """The part's typed connectors in its raw LDraw frame."""
@@ -256,6 +261,15 @@ _DATA_FILES = (
 )
 
 
+def _source_rows(
+    part_id: str, files: tuple[tuple[str, bool], ...]
+) -> Iterator[tuple[str, bool, dict[str, Any]]]:
+    """The ordered input rows for an effective part record."""
+    for name, is_override in files:
+        if (row := _parts(name).get(part_id)) is not None:
+            yield name, is_override, row
+
+
 def _merged(part_id: str, files: tuple[tuple[str, bool], ...]) -> dict[str, Any] | None:
     """``part_id``'s raw records in ``files`` merged in order, unvalidated, or
     ``None`` if no file lists it.
@@ -264,15 +278,11 @@ def _merged(part_id: str, files: tuple[tuple[str, bool], ...]) -> dict[str, Any]
     the data files' own annotations (``_part``, ``_note``) and are not part of a
     record.
     """
-    rows = [
-        (row, is_override)
-        for name, is_override in files
-        if (row := _parts(name).get(part_id)) is not None
-    ]
+    rows = list(_source_rows(part_id, files))
     if not rows:
         return None
     merged: dict[str, Any] = {}
-    for row, is_override in rows:
+    for _, is_override, row in rows:
         for key, value in row.items():
             if key.startswith("_"):
                 continue

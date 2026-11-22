@@ -17,6 +17,10 @@ assert all(spec.shape == bl.Footprint(6, 2) for spec in plates)
 `PartSpec` describes a catalog part; unknown ids are rejected. Shape information
 can be absent: use an element's measured bounding box for physical dimensions.
 
+Use `lookup_part` or `search_official_parts` for every top-level ID in the
+official LDraw 2026-10 release and to inspect the SDK data available for it.
+Use `parts_with_connectors` to find constructible parts with specific endpoints.
+
 ### Dimensions and names
 
 API dimensions are **width-first** (x, then y); slopes run along their depth (y).
@@ -29,6 +33,21 @@ API dimensions from a name. LEGO's "Slope 45 2 x 3" is a 3x2 slope in the API.
 from ..ldraw.naming import Chirality
 from .catalog import InvalidPartError, PartSpec, part_exists
 from .element import Element
+from .mountings import VerifiedMounting, verified_mountings
+from .official import (
+    OFFICIAL_PARTS_VERSION,
+    CapabilityStatus,
+    PartCapabilities,
+    PartCapability,
+    PartDataSource,
+    PartEndpoint,
+    PartKind,
+    lookup_part,
+    official_catalog_summary,
+    official_part_ids,
+    parts_with_connectors,
+    search_official_parts,
+)
 from .search import search_parts
 from .shape import Box, Disc, Ell, Footprint, Length, Pane, PartShape, Rod
 
@@ -45,10 +64,30 @@ CATALOG_TYPES = [
     Chirality,
 ]
 
-DISCOVERY = [search_parts, part_exists]
+DISCOVERY = [
+    search_parts,
+    part_exists,
+    lookup_part,
+    search_official_parts,
+    parts_with_connectors,
+    official_part_ids,
+    official_catalog_summary,
+    verified_mountings,
+]
 
 __all__ = (
-    ["Element", "InvalidPartError"]
+    [
+        "Element",
+        "InvalidPartError",
+        "OFFICIAL_PARTS_VERSION",
+        "CapabilityStatus",
+        "PartCapabilities",
+        "PartCapability",
+        "PartDataSource",
+        "PartEndpoint",
+        "PartKind",
+        "VerifiedMounting",
+    ]
     + [obj.__name__ for obj in CATALOG_TYPES]
     + [obj.__name__ for obj in DISCOVERY]
 )

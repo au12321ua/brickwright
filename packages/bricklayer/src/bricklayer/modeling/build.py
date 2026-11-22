@@ -6,23 +6,29 @@ from bisect import insort
 from collections import Counter
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from copy import deepcopy
-from functools import cached_property
-from itertools import pairwise
-from typing import Any, TypeAlias, TypeVar, cast
+from functools import cached_property, wraps
+from itertools import islice, pairwise
+from threading import RLock
+from typing import Any, ParamSpec, TypeAlias, TypeVar, cast
 from weakref import WeakKeyDictionary
 
 from .._mixins import Cached
+from ..colors import Color
+from ..diagnostics import DiagnosticError, connector_evidence
 from ..geometry import (
     Anchor,
     Connector,
     ConnectorType,
+    Direction,
     JointCoordinates,
+    JointKind,
     LegoGeometry,
     Mat3,
     Mounting,
     Pose,
     Position,
     Rotation,
+    Vec3,
 )
 from ..geometry.collision import colliding_pairs
 from ..geometry.connections import Matings, mated, same_connector
@@ -30,6 +36,7 @@ from ..geometry.linalg import Scalar, format_scalar, vec_max, vec_min
 from ..geometry.spatial import BUILD_TOLERANCE
 from ..geometry.support import supporting_pairs
 from ..parts.element import Element
+from ._assembly_trials import trial_connection
 from ._graph import component_roots
 from .articulation import (
     Joint,
@@ -41,6 +48,18 @@ from .articulation import (
     record_connection,
     remap_joint,
 )
+from .assembly import (
+    AssemblyError,
+    AssemblyIntent,
+    ConnectionCandidate,
+    ConnectionEndpoint,
+    ConnectionTrial,
+    ConnectorQuery,
+    _check_limit,
+    connection_endpoints,
+    connection_leaves,
+    find_connection_candidates,
+)
 from .names import NameRegistry
 from .placement import Placement, connect_placement, grid_placement, leaf_paths
 
@@ -48,6 +67,22 @@ from .placement import Placement, connect_placement, grid_placement, leaf_paths
 #: placement it is given and the placement it returns.
 _ContentT = TypeVar("_ContentT", bound=LegoGeometry)
 _MemoT = TypeVar("_MemoT")
+_ResultT = TypeVar("_ResultT")
+_Args = ParamSpec("_Args")
+
+# A checked insert reads both the host and its shared descendants. Serialize
+# structural edits across those models until its checks and insert are complete.
+_EDIT_LOCK = RLock()
+
+
+def _serialized_edit(method: Callable[_Args, _ResultT]) -> Callable[_Args, _ResultT]:
+    @wraps(method)
+    def run(*args: _Args.args, **kwargs: _Args.kwargs) -> _ResultT:
+        with _EDIT_LOCK:
+            return method(*args, **kwargs)
+
+    return run
+
 
 #: A placement's name, or a path of names reaching into nested sub-models:
 #: ``['A', 'B']`` is the placement named ``B`` in the sub-model placed as ``A``.
@@ -185,6 +220,7 @@ class LegoBuild(Cached, LegoGeometry):
             index=index,
         )
 
+    @_serialized_edit
     def remove(self, target: int | str | Placement) -> Placement:
         """Remove and return a top-level placement by index, name, or identity.
 
@@ -281,6 +317,7 @@ class LegoBuild(Cached, LegoGeometry):
             index=index,
         )
 
+    @_serialized_edit
     def connect(
         self,
         content: Element | LegoBuild,
@@ -318,6 +355,137 @@ class LegoBuild(Cached, LegoGeometry):
         joint = record_connection(self, placement, source, to, motion)
         return self._place(placement, name, index, joint=joint)
 
+    def connection_endpoints(
+        self,
+        on: NameRef | Placement | None = None,
+        connector_type: ConnectorQuery | None = None,
+        *,
+        facing: Direction | Vec3 | None = None,
+        toward: Position | tuple[float, float, float] | Direction | None = None,
+    ) -> tuple[ConnectionEndpoint, ...]:
+        """Find model-frame endpoints on a current placement or named sub-model.
+
+        Omit `on` to look across the whole build. `facing` filters the connector
+        axis. `toward` ranks endpoints nearest a position or furthest in a
+        direction. Occupied point connectors are hidden. Sliding endpoints may
+        offer only part of their travel, depending on the counterpart.
+        """
+        return connection_endpoints(
+            self, on, connector_type, facing=facing, toward=toward
+        )
+
+    def find_connection_candidates(
+        self,
+        on: NameRef | Placement | None = None,
+        intent: AssemblyIntent | str | None = None,
+        *,
+        content: Element | LegoBuild | None = None,
+        part_ids: Iterable[str] | None = None,
+        color: Color = Color.WHITE,
+        parent_type: ConnectorQuery | None = None,
+        child_type: ConnectorQuery | None = None,
+        joint_kind: JointKind | None = None,
+        facing: Direction | Vec3 | None = None,
+        toward: Position | tuple[float, float, float] | Direction | None = None,
+        mountings: Iterable[Mounting] | None = None,
+        target_rotation: Mat3 | Rotation | None = None,
+        target_position: Position | tuple[float, float, float] | None = None,
+        motion: MotionRange | None = None,
+        opening_toward: Direction | Vec3 | None = None,
+        opening_point: Position | tuple[float, float, float] | None = None,
+        limit: int = 20,
+    ) -> tuple[ConnectionCandidate, ...]:
+        """Find candidate mounting poses for a placed part or sub-model.
+
+        Pass an incoming `content` or search the catalog, optionally restricted
+        to `part_ids`. Use `intent`, endpoint types, or `joint_kind` to narrow
+        the interfaces. `facing` and `toward` select host endpoints in this
+        model's frame. Applicable catalog-verified poses rank first within the
+        selected endpoints. Other candidates use quarter-turn clocking where
+        permitted and seat sliding pairs within spans that fit the requested travel.
+
+        Explicit `mountings`, `target_rotation`, and `target_position` use the
+        same fitting as `connect`. To filter by movement, give a `motion` and
+        `opening_toward` in the model frame. The incoming `opening_point`
+        defaults to the content's center. It must move in that direction from
+        rest to `motion.upper` (or `motion.lower` if the upper bound is zero).
+        `trial_connections` checks colliding placements and any motion. It also
+        reports the actual joint kind when the geometry constrains its movement.
+        """
+        return find_connection_candidates(
+            self,
+            on,
+            intent,
+            content=content,
+            part_ids=part_ids,
+            color=color,
+            parent_type=parent_type,
+            child_type=child_type,
+            joint_kind=joint_kind,
+            facing=facing,
+            toward=toward,
+            mountings=mountings,
+            target_rotation=target_rotation,
+            target_position=target_position,
+            motion=motion,
+            opening_toward=opening_toward,
+            opening_point=opening_point,
+            limit=limit,
+        )
+
+    def trial_connections(
+        self,
+        candidates: Iterable[ConnectionCandidate],
+        *,
+        limit: int = 8,
+        samples: int = 5,
+        max_samples: int = 10000,
+    ) -> tuple[ConnectionTrial, ...]:
+        """Check a bounded number of candidates independently against this build.
+
+        Results follow input order and record the checks actually performed.
+        Each trial checks endpoint liveness, mating, and collisions involving
+        the proposed content. If the resulting build has annotated motion,
+        check the sampled poses with `check_motion`. The build is unchanged.
+        """
+        _check_limit(limit)
+        trials = []
+        for candidate in islice(candidates, limit):
+            with _EDIT_LOCK:
+                trial, _ = trial_connection(
+                    self, candidate, samples=samples, max_samples=max_samples
+                )
+            trials.append(trial)
+        return tuple(trials)
+
+    @_serialized_edit
+    def place_connection(
+        self,
+        candidate: ConnectionCandidate,
+        *,
+        name: str | None = None,
+        index: int | None = None,
+        samples: int = 5,
+        max_samples: int = 10000,
+    ) -> Placement:
+        """Recheck a candidate in the current build and place it with its joint.
+
+        Optional `name` and `index` behave as in `connect`. On a failed trial,
+        `AssemblyError` exposes the check results and leaves the build unchanged.
+        """
+        trial, prepared = trial_connection(
+            self,
+            candidate,
+            name=name,
+            index=index,
+            samples=samples,
+            max_samples=max_samples,
+        )
+        if prepared is None:
+            raise AssemblyError(trial)
+        placement, joint = prepared
+        return self._place(placement, name, index, joint=joint)
+
     @property
     def joints(self) -> tuple[Joint, ...]:
         """Connections recorded in this model; nested records stay in their owner.
@@ -347,6 +515,7 @@ class LegoBuild(Cached, LegoGeometry):
                 return joint
         raise ValueError("placement has no joint in this model")
 
+    @_serialized_edit
     def set_motion(self, joint: Joint | Placement, motion: MotionRange | None) -> Joint:
         """Replace a local joint's range; ``None`` makes it static. Return the record."""
         if isinstance(joint, Placement):
@@ -380,6 +549,7 @@ class LegoBuild(Cached, LegoGeometry):
         """
         return check_motion(self, samples=samples, max_samples=max_samples)
 
+    @_serialized_edit
     def extend(
         self,
         other: LegoBuild,
@@ -407,6 +577,7 @@ class LegoBuild(Cached, LegoGeometry):
         self._invalidate()
         return result
 
+    @_serialized_edit
     def add_step(self, index: int | None = None) -> None:
         """Close the build step before `index` placements, defaulting to all so far.
 
@@ -421,6 +592,7 @@ class LegoBuild(Cached, LegoGeometry):
         )
         insort(self._steps, marker)
 
+    @_serialized_edit
     def remove_step(self, index: int) -> None:
         """Drop one build-step marker sitting at ``index`` placements.
 
@@ -543,6 +715,10 @@ class LegoBuild(Cached, LegoGeometry):
                     for leaf in content.flattened_placements
                 )
         return tuple(leaves)
+
+    @cached_property
+    def _connection_leaves(self) -> dict[tuple[Placement, ...], Placement[Element]]:
+        return connection_leaves(self)
 
     @cached_property
     def colliding_placements(
@@ -689,6 +865,7 @@ class LegoBuild(Cached, LegoGeometry):
         """
         return ref if isinstance(ref, Placement) else self._resolve_name(ref)
 
+    @_serialized_edit
     def _place(
         self,
         placement: Placement,
@@ -832,7 +1009,12 @@ def _resolve_connector(
     for connector in geometry.connectors:
         if same_connector(connector, spec):
             return connector
-    raise ValueError(f"{spec} is not a connector of {geometry!r}")
+    raise DiagnosticError(
+        f"{spec} is not a connector of {geometry!r}",
+        code="connector.not_found",
+        evidence={"source_connector": connector_evidence(spec)},
+        next_action="Pass an endpoint returned by find_connectors() on the content being placed.",
+    )
 
 
 def _is_grounded(placement: Placement, ground: float) -> bool:

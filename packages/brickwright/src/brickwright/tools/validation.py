@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import io
-import traceback
 from collections.abc import Iterable
 from contextlib import redirect_stdout
 from hashlib import sha256
@@ -14,6 +13,13 @@ from pydantic import BaseModel, ConfigDict, Field
 from ..config import Config
 from ..record import Record, Status
 from . import build_execution
+from .diagnostics import (
+    Diagnostic,
+    DiagnosticReport,
+    captured_traceback,
+    exception_diagnostic,
+    source_read_diagnostic,
+)
 from .testing import CheckResult, TestContext
 
 if TYPE_CHECKING:
@@ -38,13 +44,12 @@ class BuildDimensions(BaseModel):
         )
 
 
-class ValidationReport(BaseModel):
+class ValidationReport(DiagnosticReport):
     """The full result of validating a record's build.py."""
-
-    model_config = ConfigDict(frozen=True)
 
     ok: bool
     source_sha256: str | None = None
+    report_path: str | None = None  # snapshot report relative to the record
     build_error: str | None = None
     error_type: str | None = None  # exception type that caused a build error
     checks: list[CheckResult] = Field(default_factory=list)
@@ -67,9 +72,21 @@ class ValidationReport(BaseModel):
     ) -> ValidationReport:
         """A report for a build that was created; ``ok`` is true iff every check passed."""
         checks = list(checks)
+        diagnostics = [
+            issue
+            for check in checks
+            if not check.passed
+            for issue in (check.diagnostics or [_custom_check_diagnostic(check)])
+        ]
         return cls(
             ok=all(c.passed for c in checks),
-            checks=checks,
+            checks=[
+                check.model_copy(update={"diagnostics": []})
+                if check.diagnostics
+                else check
+                for check in checks
+            ],
+            diagnostics=diagnostics,
             stdout=stdout,
             dimensions=BuildDimensions.of(build) if build is not None else None,
             brick_count=build.brick_count if build is not None else None,
@@ -77,10 +94,30 @@ class ValidationReport(BaseModel):
 
     @classmethod
     def error(
-        cls, message: str, *, stdout: str = "", error_type: str | None = None
+        cls,
+        message: str,
+        *,
+        stdout: str = "",
+        error_type: str | None = None,
+        diagnostics: list[Diagnostic] | None = None,
     ) -> ValidationReport:
         """A report for a build that raised or timed out before its checks ran."""
-        return cls(ok=False, build_error=message, error_type=error_type, stdout=stdout)
+        return cls(
+            ok=False,
+            build_error=message,
+            error_type=error_type,
+            stdout=stdout,
+            diagnostics=diagnostics or [],
+        )
+
+
+def _custom_check_diagnostic(check: CheckResult) -> Diagnostic:
+    return Diagnostic(
+        code="validation.check_failed",
+        stage="run_tests",
+        message=check.detail or f"Check {check.name!r} failed.",
+        evidence={"check": check.name},
+    )
 
 
 def validate(record: Record, config: Config | None = None) -> ValidationReport:
@@ -91,13 +128,28 @@ def validate(record: Record, config: Config | None = None) -> ValidationReport:
     under ``snapshots/`` so the build's history across iterations is kept.
     """
     config = config or Config()
-    source = record.read_build()
+    try:
+        source = record.read_build()
+    except (OSError, UnicodeError) as exc:
+        report = source_read_failure(exc)
+        _write_report(record, report)
+        record.update_meta(status=Status.ERROR, validated_source_sha256=None)
+        return report
+
     report = build_execution.run_guarded(
         _validate,
         (str(record.build_path), source),
         config.build_timeout,
         lambda e: ValidationReport.error(
-            f"Validation failed: {e}", error_type=type(e).__name__
+            f"Validation failed: {e}",
+            error_type="RuntimeError"
+            if isinstance(e, build_execution.ChildExited)
+            else type(e).__name__,
+            diagnostics=[
+                build_execution.subprocess_diagnostic(
+                    e, "validate", config.build_timeout
+                )
+            ],
         ),
     )
     return save_validation(record, source, report)
@@ -108,17 +160,38 @@ def save_validation(
 ) -> ValidationReport:
     """Persist a report and snapshot bound to the exact source that was checked."""
     digest = sha256(source.encode()).hexdigest()
-    if record.source_sha256 != digest:
+    try:
+        current_digest = record.source_sha256
+    except FileNotFoundError:
+        current_digest = None
+    if current_digest != digest:
+        message = "build.py changed during validation/export; validate the current source again"
         report = ValidationReport.error(
-            "build.py changed during validation/export; validate the current source again",
+            f"{message}\n\n{report.build_error}" if report.build_error else message,
             error_type="SourceChanged",
+            stdout=report.stdout,
+            diagnostics=[
+                Diagnostic(
+                    code="source.changed",
+                    stage="validate",
+                    message=message,
+                    evidence={
+                        "checked_sha256": digest,
+                        "current_sha256": current_digest,
+                    },
+                    next_action="Validate the current build.py before finalizing it.",
+                ),
+                *report.diagnostics,
+            ],
         )
-    report = report.model_copy(update={"source_sha256": digest})
-
-    serialized = report.model_dump_json(indent=2) + "\n"
-    record.out_dir.mkdir(parents=True, exist_ok=True)
-    record.report_path.write_text(serialized)
-    record.add_snapshot(source, serialized)
+    snapshot = record.snapshot_source(source)
+    report = report.model_copy(
+        update={
+            "source_sha256": digest,
+            "report_path": str(snapshot.report_path.relative_to(record.path)),
+        }
+    )
+    snapshot.report_path.write_text(_write_report(record, report))
     if report.ok:
         status = Status.VALID
     elif report.build_error:
@@ -127,6 +200,22 @@ def save_validation(
         status = Status.INVALID
     record.update_meta(status=status, validated_source_sha256=digest)
     return report
+
+
+def _write_report(record: Record, report: ValidationReport) -> str:
+    serialized = report.model_dump_json(indent=2) + "\n"
+    record.out_dir.mkdir(parents=True, exist_ok=True)
+    record.report_path.write_text(serialized)
+    return serialized
+
+
+def source_read_failure(exc: Exception) -> ValidationReport:
+    """Report a build.py read error, before any source could be executed."""
+    return ValidationReport.error(
+        str(exc),
+        error_type=type(exc).__name__,
+        diagnostics=[source_read_diagnostic(exc)],
+    )
 
 
 def _validate(build_path: str, source: str | None = None) -> ValidationReport:
@@ -143,16 +232,19 @@ def build_and_validate(
     Connectivity remains a custom check so multipart builds can choose its policy.
     """
     buf = io.StringIO()
-
+    stage = "load_build"
     try:
         with redirect_stdout(buf):
             module = build_execution.load_build_module(build_path, source)
+            stage = "create_build"
             create = module.create_build
             build = create()
             module.create_build = lambda *args, **kwargs: (
                 create(*args, **kwargs) if args or kwargs else build
             )
+            stage = "run_tests"
             custom = list(module.run_tests())
+            stage = "validate"
             physical = TestContext(build)
             physical.check_no_floating()
             physical.check_no_collisions()
@@ -164,7 +256,12 @@ def build_and_validate(
         )
     except Exception as exc:
         return None, ValidationReport.error(
-            traceback.format_exc(), stdout=_stdout(buf), error_type=type(exc).__name__
+            captured_traceback(exc, build_path, source),
+            stdout=_stdout(buf),
+            error_type=type(exc).__name__,
+            diagnostics=[
+                exception_diagnostic(exc, stage, filename=build_path, source=source)
+            ],
         )
 
 

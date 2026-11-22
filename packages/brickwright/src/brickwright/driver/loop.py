@@ -4,6 +4,8 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
+from bricklayer.diagnostics import DiagnosticError
+
 from ..config import Config, CritiqueMode
 from ..record import Record, StopReason
 from ..tools import (
@@ -13,6 +15,7 @@ from ..tools import (
     render_available,
     render_views,
 )
+from ..tools.registry import tool_call_failure
 from .completion import litellm_complete
 from .critique import CritiqueResult, critique
 from .messages import (
@@ -220,7 +223,14 @@ def _run_tool_calls(run: _Run, tool_calls: list[Any]) -> None:
                 tool_call_message(tc, "skipped: validation budget reached")
             )
             continue
-        arguments = tool_call_arguments(tc)
+        try:
+            arguments = tool_call_arguments(tc)
+        except DiagnosticError as exc:
+            outcome = tool_call_failure(name, exc)
+            run.narrator.tool_called(name, {})
+            run.narrator.tool_finished(name, outcome)
+            run.transcript.append(tool_call_message(tc, outcome))
+            continue
         run.narrator.tool_called(name, arguments)
         source = run.record.source_sha256
         with run.tracker.time_tool(name):

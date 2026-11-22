@@ -6,16 +6,21 @@ runs a single tool call against a record and returns a :class:`ToolOutcome`. Too
 read and recover from -- they do not raise.
 """
 
+from __future__ import annotations
+
 import json
 from collections.abc import Callable, Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Generic, TypeVar
 
+from bricklayer.diagnostics import DiagnosticError
 from pydantic import ValidationError
 
 from ..config import Config
+from ..knowledge import read_knowledge, search_knowledge
 from ..record import Record, Usage, UsageTracker
+from .diagnostics import Diagnostic, exception_diagnostic
 from .editing import (
     EditError,
     ViewError,
@@ -39,13 +44,16 @@ from .schemas import (
     InsertBuildArgs,
     MultiEditBuildArgs,
     ReadBuildArgs,
+    ReadBuildingKnowledgeArgs,
     RenderArgs,
+    SearchBuildingKnowledgeArgs,
     ToolArgs,
     ValidateArgs,
     WriteBuildArgs,
     function_tool,
 )
 from .subagents import SubagentResult, dispatch_subagents
+from .tool_arguments import argument_diagnostics, argument_object
 from .validation import ValidationReport, validate
 
 
@@ -71,27 +79,75 @@ class ToolOutcome:
     report: ValidationReport | None = None
     image: Path | None = None  # an image to show the model next, e.g. a fresh render
     usage: Usage | None = None  # token usage to fold into the run (e.g. from subagents)
+    diagnostics: list[Diagnostic] = field(default_factory=list)
+
+    @classmethod
+    def failure(cls, message: str, diagnostics: list[Diagnostic]) -> ToolOutcome:
+        """Encode a tool error and its diagnostic facts for the model."""
+        return cls(
+            json.dumps(
+                {
+                    "ok": False,
+                    "error": message,
+                    "diagnostics": [
+                        issue.model_dump(mode="json") for issue in diagnostics
+                    ],
+                }
+            ),
+            ok=False,
+            diagnostics=diagnostics,
+        )
+
+
+def tool_call_failure(name: str, exc: DiagnosticError) -> ToolOutcome:
+    """Return a diagnostic for an error before a tool handler could run."""
+    issue = Diagnostic(
+        code=exc.code,
+        stage="tool_call",
+        message=str(exc),
+        evidence={"tool": name, **exc.evidence},
+        next_action=exc.next_action,
+    )
+    return ToolOutcome.failure(f"{name} failed: {exc}", [issue])
+
+
+def unknown_tool(name: str) -> ToolOutcome:
+    return tool_call_failure(
+        name,
+        DiagnosticError(
+            f"unknown tool {name!r}",
+            code="tool.unknown",
+            next_action="Choose a tool from the available tool descriptions.",
+        ),
+    )
 
 
 def execute_tool(
     record: Record, config: Config, name: str, arguments: dict[str, Any]
 ) -> ToolOutcome:
     """Run a single tool call against ``record`` and return its outcome."""
-    if not isinstance(arguments, dict):
-        return ToolOutcome(f"{name} failed: arguments must be a JSON object", ok=False)
     tool = _TOOLS.get(name)
     if tool is None:
-        return ToolOutcome(f"unknown tool {name!r}", ok=False)
+        return unknown_tool(name)
     try:
-        parsed = tool.arguments.model_validate(arguments)
+        parsed = tool.arguments.model_validate(argument_object(arguments))
+    except DiagnosticError as exc:
+        return tool_call_failure(name, exc)
     except ValidationError as exc:
-        return ToolOutcome(f"{name} failed: invalid arguments\n{exc}", ok=False)
+        return ToolOutcome.failure(
+            f"{name} failed: invalid arguments", argument_diagnostics(name, exc)
+        )
     return tool.handler(record, config, parsed)
 
 
 def validation_outcome(report: ValidationReport) -> ToolOutcome:
     """The reply for a ``validate`` call that produced ``report``."""
-    return ToolOutcome(report.model_dump_json(), ok=report.ok, report=report)
+    return ToolOutcome(
+        report.model_dump_json(),
+        ok=report.ok,
+        report=report,
+        diagnostics=report.diagnostics,
+    )
 
 
 def subagent_outcome(results: list[SubagentResult]) -> ToolOutcome:
@@ -137,7 +193,7 @@ def _read_build(record: Record, config: Config, args: ReadBuildArgs) -> ToolOutc
     try:
         return ToolOutcome(view(record.read_build(), args.view_range))
     except ViewError as exc:
-        return ToolOutcome(f"read failed: {exc}", ok=False)
+        return _edit_failure("read failed", exc)
 
 
 def _write_build(record: Record, config: Config, args: WriteBuildArgs) -> ToolOutcome:
@@ -149,7 +205,7 @@ def _insert_build(record: Record, config: Config, args: InsertBuildArgs) -> Tool
     try:
         snippet = insert_build(record, args.insert_line, args.insert_text)
     except EditError as exc:
-        return ToolOutcome(f"insert failed: {exc}", ok=False)
+        return _edit_failure("insert failed", exc)
     return _edited(snippet)
 
 
@@ -157,7 +213,7 @@ def _edit_build(record: Record, config: Config, args: EditBuildArgs) -> ToolOutc
     try:
         snippet = edit_build(record, args.old_str, args.new_str, args.replace_all)
     except EditError as exc:
-        return ToolOutcome(f"edit failed: {exc}", ok=False)
+        return _edit_failure("edit failed", exc)
     return _edited(snippet)
 
 
@@ -167,7 +223,7 @@ def _multi_edit_build(
     try:
         applied = multi_edit_build(record, list(args.edits))
     except EditError as exc:
-        return ToolOutcome(f"multi-edit failed (build.py unchanged): {exc}", ok=False)
+        return _edit_failure("multi-edit failed (build.py unchanged)", exc)
     return ToolOutcome(f"ok: applied {applied} edits to build.py")
 
 
@@ -177,7 +233,32 @@ def _validate(record: Record, config: Config, args: ValidateArgs) -> ToolOutcome
 
 def _explore(record: Record, config: Config, args: ExploreArgs) -> ToolOutcome:
     result = explore(record, args.code, config)
-    return ToolOutcome(result.output, ok=result.ok)
+    return ToolOutcome(
+        result.model_dump_json() if result.diagnostics else result.output,
+        ok=result.ok,
+        diagnostics=result.diagnostics,
+    )
+
+
+def _search_building_knowledge(
+    record: Record,
+    config: Config,
+    args: SearchBuildingKnowledgeArgs,
+) -> ToolOutcome:
+    result = search_knowledge(args.query, limit=args.limit)
+    return ToolOutcome(result.model_dump_json())
+
+
+def _read_building_knowledge(
+    record: Record,
+    config: Config,
+    args: ReadBuildingKnowledgeArgs,
+) -> ToolOutcome:
+    try:
+        entry = read_knowledge(args.entry_id)
+    except KeyError:
+        return ToolOutcome(f"Unknown knowledge entry {args.entry_id!r}.", ok=False)
+    return ToolOutcome(entry.model_dump_json())
 
 
 def _render(record: Record, config: Config, args: RenderArgs) -> ToolOutcome:
@@ -197,17 +278,27 @@ def _render(record: Record, config: Config, args: RenderArgs) -> ToolOutcome:
             f"ok: rendered the build to {rendered}; the image follows.",
             image=report.image_path,
         )
-    return ToolOutcome(f"render failed:\n{report.error}", ok=False)
+    return ToolOutcome.failure(f"render failed:\n{report.error}", report.diagnostics)
 
 
 def _finalize(record: Record, config: Config, args: FinalizeArgs) -> ToolOutcome:
     report = finalize(record, config)
-    message = (
-        "ok: build compiled to out/build.ldr"
-        if report.ok
-        else f"compile failed:\n{report.error}"
+    diagnostics = report.diagnostics + (
+        report.validation.diagnostics if report.validation is not None else []
     )
-    return ToolOutcome(message, ok=report.ok, done=report.ok, report=report.validation)
+    if report.ok:
+        message = "ok: build compiled to out/build.ldr"
+    else:
+        message = report.model_copy(
+            update={"error": f"compile failed:\n{report.error}"}
+        ).model_dump_json()
+    return ToolOutcome(
+        message,
+        ok=report.ok,
+        done=report.ok,
+        report=report.validation,
+        diagnostics=diagnostics,
+    )
 
 
 def _dispatch(record: Record, config: Config, args: DispatchArgs) -> ToolOutcome:
@@ -225,8 +316,18 @@ _TOOLS: dict[str, _Tool[Any]] = {
     "render": _Tool(RenderArgs, _render),
     "finalize": _Tool(FinalizeArgs, _finalize),
     "dispatch_subagents": _Tool(DispatchArgs, _dispatch),
+    "search_building_knowledge": _Tool(
+        SearchBuildingKnowledgeArgs, _search_building_knowledge
+    ),
+    "read_building_knowledge": _Tool(
+        ReadBuildingKnowledgeArgs, _read_building_knowledge
+    ),
 }
 _ALL_TOOLS = [function_tool(name, tool.arguments) for name, tool in _TOOLS.items()]
+
+
+def _edit_failure(message: str, exc: DiagnosticError) -> ToolOutcome:
+    return ToolOutcome.failure(f"{message}: {exc}", [exception_diagnostic(exc, "edit")])
 
 
 def _edited(snippet: str) -> ToolOutcome:

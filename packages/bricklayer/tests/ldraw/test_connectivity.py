@@ -124,8 +124,8 @@ class TestShippedRegistry:
         return all_connector_types()
 
     def test_every_triple_resolves_to_its_own_name(self, types):
-        # 196 triples plus the one authored pair.
-        assert len(types) == 198
+        # 196 triples plus the two authored pairs.
+        assert len(types) == 200
         assert all(name == conn_type.name for name, conn_type in types.items())
 
     def test_uses_grid_is_exactly_the_stud_and_hole_families(self, types):
@@ -142,7 +142,7 @@ class TestShippedRegistry:
             "wrist_socket", "wrist_peg", "visor_socket", "visor_peg",
             "waist_socket", "waist_peg", "neck_bracket", "neck_loop",
             "towball", "towball_socket", "turntable_pin", "turntable_socket",
-            "pane_tab", "frame_slot",
+            "pane_tab", "frame_slot", "hook_slide_arm", "hook_slide_channel",
         ],
     )  # fmt: skip
     def test_the_names_our_code_and_docs_use_all_exist(self, name, types):

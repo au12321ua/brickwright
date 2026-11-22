@@ -12,6 +12,10 @@ from multiprocessing.queues import Queue
 from pathlib import Path
 from typing import Any, TypeVar
 
+from pydantic import JsonValue
+
+from .diagnostics import Diagnostic
+
 T = TypeVar("T")
 
 # Synthetic module name for the loaded build file.
@@ -22,6 +26,36 @@ MAX_OUTPUT = 10_000
 
 # How often a waiting parent checks whether its child has died.
 _POLL_INTERVAL = 0.1
+
+
+class ChildExited(RuntimeError):
+    """A worker stopped without producing a result."""
+
+    def __init__(self, exit_code: int | None) -> None:
+        super().__init__(f"exited with code {exit_code}")
+        self.exit_code = exit_code
+
+
+def subprocess_diagnostic(exc: Exception, operation: str, timeout: float) -> Diagnostic:
+    """Expose facts available to the parent when a worker returned no report."""
+    evidence: dict[str, JsonValue] = {"operation": operation}
+    if isinstance(exc, TimeoutError):
+        return Diagnostic(
+            code="execution.timeout",
+            stage=operation,
+            message=str(exc),
+            evidence=evidence | {"timeout_seconds": timeout},
+            next_action="Reduce the work done by this operation or retry with a longer timeout.",
+        )
+    if isinstance(exc, ChildExited):
+        evidence["exit_code"] = exc.exit_code
+    return Diagnostic(
+        code="execution.child_exit",
+        stage=operation,
+        message=str(exc),
+        evidence=evidence,
+        next_action="Check the worker's stderr for the cause of the exit.",
+    )
 
 
 def cap_output(text: str) -> str:
@@ -96,7 +130,7 @@ def run_in_subprocess(fn: Callable, args: tuple[Any, ...], timeout: float) -> An
             # Short timeout covers the queue's flush
             return result.get(timeout=0.5)  # pragma: no mutate -- null deadlocks mutmut
         except queue.Empty:
-            raise RuntimeError(f"exited with code {proc.exitcode}")
+            raise ChildExited(proc.exitcode) from None
     finally:
         proc.join(timeout=_POLL_INTERVAL)
         if proc.is_alive():

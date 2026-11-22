@@ -1,0 +1,56 @@
+{
+  "id": "clip-and-bar",
+  "title": "Seat a round bar in a clip",
+  "applicability": "Use for a small rail, handle or pivot using a documented clip/bar pair. The chosen axial station must fit on the usable bar section clear of ends and neighboring parts.",
+  "aliases": [
+    "grip a rod",
+    "handle bracket",
+    "clip grabs pole",
+    "rail with C-clips",
+    "夹杆",
+    "卡扣夹住杆",
+    "栏杆怎么固定",
+    "小圆杆把手"
+  ],
+  "topics": [
+    "rails",
+    "handles",
+    "hinges",
+    "bars",
+    "栏杆"
+  ],
+  "actions": [
+    "clip",
+    "seat",
+    "align axes",
+    "rotate",
+    "slide"
+  ],
+  "parts": [
+    "3020",
+    "60470b",
+    "30374"
+  ],
+  "diagnostics": [
+    "connector.ambiguous",
+    "connector.occupied",
+    "assembly.collision"
+  ],
+  "steps": [
+    "Choose the bar connector and a specific clip. The 60470b has two clips, so the example deliberately ranks toward +x to use the outer one.",
+    "Support the clip plate on a deck and leave the jaws over the deck edge. Mate the 30374 bar to the selected clip and inspect the rod axis and endpoints against nearby parts.",
+    "If the bar needs to move, use the reported joint kind to set its translation and turning range. Validate the samples with any handles, stops or additional clips attached. The model checks clearances and engagement at sampled positions. Clip flex and gripping force require other evidence."
+  ],
+  "example": "clip_and_bar.py",
+  "expected": "The rail is horizontal, joins the deck through the clip plate, and records a cylindrical joint for this pair.",
+  "sources": [
+    {
+      "author": "Carlos Antelo",
+      "title": "Connector evidence and snapping",
+      "url": "https://github.com/anteloc/ldraw-nova/blob/d1e93d73f6ffe6955caa90953a98a0c90fbd5c5c/docs/agent/reference/connections.md",
+      "license": "CC BY-SA 4.0",
+      "adaptation": "Reference only. Connector-type distinctions and checks of occupied interfaces informed the topic selection. The BrickWright guidance and example are original.",
+      "attribution_url": "https://github.com/anteloc/ldraw-nova/blob/d1e93d73f6ffe6955caa90953a98a0c90fbd5c5c/ATTRIBUTION.md"
+    }
+  ]
+}

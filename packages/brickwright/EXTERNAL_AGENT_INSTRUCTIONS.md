@@ -13,6 +13,11 @@ brickwright external instructions > INSTRUCTIONS.md
 ```
 
 Then, read the file. As it is quite long, you may have to read it in several segments.
+See **Choosing a connection** for side-mounted parts and moving assemblies.
+
+Use `brickwright knowledge search <query>` to find local guides by build task, part ID,
+or diagnostic code. Use `brickwright knowledge show <id>` to read the steps, runnable
+example, expected checks, and sources for a match.
 
 ## Step 1: Create a record
 

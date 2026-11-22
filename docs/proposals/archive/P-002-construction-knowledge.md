@@ -1,10 +1,10 @@
 # P-002 — 按搭建问题检索的 BrickWright 知识库
 
-Status: accepted
+Status: completed
 
 ## 问题与目标
 
-现有内外代理共享搭建指引和从代码生成的完整 API 参考。知道函数名的代理能查到参数，但“翼子板挡住转向轮”涉及空间、选件、运动检查三个问题，靠单个函数说明难以回答。Nova 的指南、可检索案例和专题研究提供了选题依据。我们要让使用 BrickWright 的代理用自己的任务描述、零件号或执行错误找到下一步，并让案例随 SDK 演进保持可用。[提示组装](../../packages/brickwright/src/brickwright/prompts/compilation.py) · [Nova 搭建指南](https://github.com/anteloc/ldraw-nova/tree/d1e93d73f6ffe6955caa90953a98a0c90fbd5c5c/docs/agent/guides)
+现有内外代理共享搭建指引和从代码生成的完整 API 参考。知道函数名的代理能查到参数，但“翼子板挡住转向轮”涉及空间、选件、运动检查三个问题，靠单个函数说明难以回答。Nova 的指南、可检索案例和专题研究提供了选题依据。我们要让使用 BrickWright 的代理用自己的任务描述、零件号或执行错误找到下一步，并让案例随 SDK 演进保持可用。[提示组装](../../../packages/brickwright/src/brickwright/prompts/compilation.py) · [Nova 搭建指南](https://github.com/anteloc/ldraw-nova/tree/d1e93d73f6ffe6955caa90953a98a0c90fbd5c5c/docs/agent/guides)
 
 ## 内容与交付
 
@@ -24,18 +24,24 @@ Status: accepted
 
 ## 来源与发布
 
-本项目代码按 MIT 发布。Nova 根许可证为 AGPLv3，文档和研究材料标明 CC BY-SA 4.0，Technic 资料还包含来自 ldraw-mecha 的改编及单独署名的模型。对照主题时记录参考资料的作者、文件和固定版本，使用 BrickLayer 的 API、独立设计的小模型和运行记录撰写原创内容。[本仓库许可证](../../LICENSE) · [Nova 署名与来源链](https://github.com/anteloc/ldraw-nova/blob/d1e93d73f6ffe6955caa90953a98a0c90fbd5c5c/ATTRIBUTION.md) · [Nova 代码许可](https://github.com/anteloc/ldraw-nova/blob/d1e93d73f6ffe6955caa90953a98a0c90fbd5c5c/LICENSE)
+本项目代码按 MIT 发布。Nova 根许可证为 AGPLv3，文档和研究材料标明 CC BY-SA 4.0，Technic 资料还包含来自 ldraw-mecha 的改编及单独署名的模型。对照主题时记录参考资料的作者、文件和固定版本，使用 BrickLayer 的 API、独立设计的小模型和运行记录撰写原创内容。[本仓库许可证](../../../LICENSE) · [Nova 署名与来源链](https://github.com/anteloc/ldraw-nova/blob/d1e93d73f6ffe6955caa90953a98a0c90fbd5c5c/ATTRIBUTION.md) · [Nova 代码许可](https://github.com/anteloc/ldraw-nova/blob/d1e93d73f6ffe6955caa90953a98a0c90fbd5c5c/LICENSE)
 
-如选用翻译、表格改编、图像、模型或外部数据，为具体资产保留作者、原始链接、许可证、上游署名链及修改说明。改编的 CC BY-SA 文档独立标注并按相同或兼容条款分发，包内和查询该条目的结果都能找到署名。逐项核实第三方材料自己的条款，来源或再分发权限未确认的素材仅给出处链接。检索程序独立实现。上游投稿时可以按文件区分原创内容和另行许可的材料。[CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/) · [BrickLayer 数据来源](../../packages/bricklayer/NOTICE)
+如选用翻译、表格改编、图像、模型或外部数据，为具体资产保留作者、原始链接、许可证、上游署名链及修改说明。改编的 CC BY-SA 文档独立标注并按相同或兼容条款分发，包内和查询该条目的结果都能找到署名。逐项核实第三方材料自己的条款，来源或再分发权限未确认的素材仅给出处链接。检索程序独立实现。上游投稿时可以按文件区分原创内容和另行许可的材料。[CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/) · [BrickLayer 数据来源](../../../packages/bricklayer/NOTICE)
 
 ## 取舍与并行边界
 
 把百科全文编入提示会挤占搭建上下文，直接翻译 Nova 则会同时带入另一套坐标、命令、能力假设和许可义务。采用随包的原创条目与本地检索，代价是维护术语和案例。案例在测试中运行，能及时发现 API 或零件能力发生变化。完整 API 参考继续由代码生成。
 
-P-002 维护指南、案例、主题检索和署名。装配 API 与诊断格式由 P-001 维护，版本化部件事实由 P-003 维护。用现有 SDK 编写可运行示例，尚在开发的诊断和查询用约定的输入输出样例对接。[并行约定](README.md#并行开发约定)
+P-002 维护指南、案例、主题检索和署名。装配 API 与诊断格式由 P-001 维护，版本化部件事实由 P-003 维护。用现有 SDK 编写可运行示例，尚在开发的诊断和查询用约定的输入输出样例对接。[并行约定](../README.md#并行开发约定)
 
 ## 验收
 
 - 建一个固定查询集，覆盖表内每类技法和三个成品主题。将“把窗饰挂在墙外侧”“车轮转弯擦到车身”“舱盖合得上却打不开”等未使用 API 名称的问法列入用例。两条代理入口的前三个结果中应含预定适用条目；未知主题应明确返回无匹配。
 - 正常安装后从仓库外使用知识库，验证索引、正文、示例和署名都随包可达。执行全部标为可运行的案例，并核对预期的连接、几何或运动采样结果。诊断案例至少贯通一次“失败 → 查询错误码 → 读到建议 → 修复通过”。
 - 检查每个引用和资源的来源、许可、修改声明及关联条目。检查 P-001 的诊断码和 P-003 的零件 ID 能解析。知识库自动化验收使用本地数据和 SDK。
+
+## 实现与验收结果
+
+内置知识工具、外部 CLI 和 Python 共用 17 条原创条目。固定的 20 个自然语言问法在两条代理入口都能于前三项查到预期条目，未知主题返回空结果。随包的 16 个搭建示例在 SDK 上执行。另一个跨入口回归从两孔零件 `32000` 的选择歧义出发，按 `connector.ambiguous` 找到指南，消除歧义后重新验证并导出。[查询与安装验收](../../../packages/brickwright/tests/test_knowledge_acceptance.py) · [修复与导出回归](../../../packages/brickwright/tests/tools/test_connection_repair.py)
+
+Nova 用于确定选题。条目逐项注明参考作者、文件、固定 Git 版本和许可，原创正文及示例按 MIT 随包发布。安装测试在仓库外从 wheel 读取正文、运行示例并查询来源。[内容许可及第三方署名链](../../../packages/brickwright/src/brickwright/knowledge/CONTENT-LICENSE.md)
