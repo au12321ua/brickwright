@@ -36,7 +36,7 @@ uv run --locked python -m brickwright.evaluation.p001 report "$P001_OUTPUT" \
   --scores "$P001_OUTPUT/review/scores.json"
 ```
 
-`private/report.json` 保存逐题配对、实耗用量、各版总计和验收结果。省略 `--scores` 可查看进度。出现缺失试次、计量或盲评分数时，状态保持 `pending`。
+`private/report.json` 保存逐题配对、实耗用量、各版总计和验收结果。省略 `--scores` 可查看进度。出现缺失试次、计量或盲评分数时，状态保持 `pending`。若一版没有成品，其连接放置比例和成品质量无分母。资料齐备且可判断的指标未达标时，结果为 `failed`。
 
 ## 连接放置计数
 
