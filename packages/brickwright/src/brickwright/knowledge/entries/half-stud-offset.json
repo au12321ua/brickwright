@@ -1,0 +1,53 @@
+{
+  "id": "half-stud-offset",
+  "title": "Shift trim by half a stud with a jumper",
+  "applicability": "Use when a detail must land between grid columns. The jumper underside must fit the main course, and its centered upper stud needs a compatible socket on the trim.",
+  "aliases": [
+    "half pitch",
+    "off-grid offset",
+    "center odd width on even width",
+    "jumper plate",
+    "半格偏移",
+    "错开半个颗粒",
+    "奇偶宽度对齐",
+    "跳板砖"
+  ],
+  "topics": [
+    "trim",
+    "architecture",
+    "alignment",
+    "half stud",
+    "半颗粒"
+  ],
+  "actions": [
+    "offset",
+    "center",
+    "mount",
+    "align"
+  ],
+  "parts": [
+    "3004",
+    "3794b",
+    "3069b"
+  ],
+  "diagnostics": [
+    "connector.ambiguous"
+  ],
+  "steps": [
+    "Install the jumper on the parent grid. Use 3794b to shift a stud along the length of a 1×2 course. A 2×2 center-stud jumper is useful for a shift along both axes.",
+    "Choose the trim socket explicitly. The example chooses the negative-x underside socket of a 3069b tile and mates it to the center stud on the jumper. Keep the non-grid pose computed from the connectors.",
+    "Measure the trim center in the parent frame. Where the next trim piece ties back to the main grid, check that both sockets align and that the longer trim clears the neighboring wall."
+  ],
+  "example": "half_stud_offset.py",
+  "expected": "The tile origin moves from the grid-aligned x=1 to x=1.5. All parts engage and the assembly passes static checks.",
+  "sources": [
+    {
+      "author": "Carlos Antelo",
+      "title": "Build with studs facing sideways",
+      "url": "https://github.com/anteloc/ldraw-nova/blob/d1e93d73f6ffe6955caa90953a98a0c90fbd5c5c/docs/agent/guides/snot.md",
+      "license": "CC BY-SA 4.0",
+      "adaptation": "Reference only. The offset examples motivated coverage of the jumper technique. The BrickWright guidance and example are original.",
+      "attribution_url": "https://github.com/anteloc/ldraw-nova/blob/d1e93d73f6ffe6955caa90953a98a0c90fbd5c5c/ATTRIBUTION.md"
+    }
+  ]
+}

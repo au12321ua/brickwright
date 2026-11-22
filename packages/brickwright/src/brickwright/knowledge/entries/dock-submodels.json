@@ -1,0 +1,63 @@
+{
+  "id": "dock-submodels",
+  "title": "Dock reusable submodels through exposed endpoints",
+  "applicability": "Use when attaching a reusable panel, roof, or accessory as a single unit. The moving module needs a free local endpoint and the placed parent needs a matching world endpoint.",
+  "aliases": [
+    "mate two modules",
+    "install removable roof",
+    "attach a complete subassembly",
+    "module mounting contract",
+    "子模型对接",
+    "拼装模块",
+    "装上整个组件",
+    "可拆屋顶接口"
+  ],
+  "topics": [
+    "modules",
+    "panel",
+    "roof",
+    "assembly",
+    "子模型"
+  ],
+  "actions": [
+    "dock",
+    "attach",
+    "compose",
+    "reuse"
+  ],
+  "parts": [
+    "3024",
+    "3070b",
+    "11211"
+  ],
+  "diagnostics": [
+    "connector.occupied",
+    "connector.ambiguous",
+    "assembly.collision"
+  ],
+  "steps": [
+    "Define the submodel around a durable fitting. Name its leaves, mount the finish, and inspect the submodel's exposed connectors. Its free antistud must remain available after internal connections are made.",
+    "Place the rail in the parent. Select a world connector on the placed rail and use the module's local antistud as the source. The same module can be used again with a different pose.",
+    "Validate the whole assembly after docking. Check flattened leaves for support and interference between modules, and verify the separate placements in your requested count and orientation."
+  ],
+  "example": "dock_submodels.py",
+  "expected": "Two copies of the same local panel connect to one rail. Five flattened parts are valid and connected, and each module has its own pose.",
+  "sources": [
+    {
+      "author": "Carlos Antelo",
+      "title": "Compose models from inspected modules",
+      "url": "https://github.com/anteloc/ldraw-nova/blob/d1e93d73f6ffe6955caa90953a98a0c90fbd5c5c/docs/agent/guides/compose-modules.md",
+      "license": "CC BY-SA 4.0",
+      "adaptation": "Reference only. The modular workflow prompted the parent-frame/local-frame distinction and a complete-docking check. The BrickWright guidance and example are original.",
+      "attribution_url": "https://github.com/anteloc/ldraw-nova/blob/d1e93d73f6ffe6955caa90953a98a0c90fbd5c5c/ATTRIBUTION.md"
+    },
+    {
+      "author": "Carlos Antelo",
+      "title": "Connector evidence and snapping",
+      "url": "https://github.com/anteloc/ldraw-nova/blob/d1e93d73f6ffe6955caa90953a98a0c90fbd5c5c/docs/agent/reference/connections.md",
+      "license": "CC BY-SA 4.0",
+      "adaptation": "Reference only. The discussion of exposed leaf endpoints informed the example's interface boundary. The BrickWright guidance and example are original.",
+      "attribution_url": "https://github.com/anteloc/ldraw-nova/blob/d1e93d73f6ffe6955caa90953a98a0c90fbd5c5c/ATTRIBUTION.md"
+    }
+  ]
+}
