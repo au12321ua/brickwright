@@ -5,12 +5,16 @@ import unicodedata
 from functools import cache
 from importlib import resources
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 __all__ = [
+    "KnowledgeCapability",
     "KnowledgeEntry",
+    "KnowledgeExample",
     "KnowledgeMatch",
+    "KnowledgePart",
     "KnowledgeSearch",
+    "KnowledgeSource",
     "read_knowledge",
     "search_knowledge",
 ]
@@ -106,9 +110,31 @@ class KnowledgeMatch(_Summary):
     matched_on: dict[str, tuple[str, ...]]
 
 
+class KnowledgeCapability(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    status: str
+    reason_code: str
+    reason: str
+
+
+class KnowledgePart(BaseModel):
+    """Current BrickLayer catalog information for an explicitly queried part."""
+
+    part_id: str
+    version: str
+    name: str | None
+    in_version: bool
+    constructible: KnowledgeCapability
+    geometry: KnowledgeCapability
+    collision: KnowledgeCapability
+    connectivity: KnowledgeCapability
+
+
 class KnowledgeSearch(BaseModel):
     query: str
     matches: tuple[KnowledgeMatch, ...]
+    part_capabilities: tuple[KnowledgePart, ...]
     message: str | None = None
 
 
@@ -121,6 +147,7 @@ def search_knowledge(query: str, *, limit: int = 3) -> KnowledgeSearch:
     part_ids = {name.removesuffix(".dat") for name in identifiers}
     terms = _terms(normalized)
     ranked: list[tuple[int, KnowledgeMatch]] = []
+    matched_part_ids = set()
     for entry in _entries().values():
         matches = {
             "diagnostics": identifiers.intersection(map(_normalize, entry.diagnostics)),
@@ -130,6 +157,7 @@ def search_knowledge(query: str, *, limit: int = 3) -> KnowledgeSearch:
             "topics": terms & _terms(" ".join(entry.topics)),
             "actions": terms & _terms(" ".join(entry.actions)),
         }
+        matched_part_ids.update(matches["parts"])
         matched_on = {
             field: tuple(sorted(overlap))
             for field, overlap in matches.items()
@@ -159,6 +187,9 @@ def search_knowledge(query: str, *, limit: int = 3) -> KnowledgeSearch:
     return KnowledgeSearch(
         query=query,
         matches=tuple(match for _, match in ranked[:limit]),
+        part_capabilities=tuple(
+            _lookup_part(part_id) for part_id in sorted(matched_part_ids)
+        ),
         message=None if ranked else "No matching knowledge entries.",
     )
 
@@ -171,6 +202,12 @@ def read_knowledge(entry_id: str) -> KnowledgeEntry:
         source = (_RESOURCES / "examples" / data.example).read_text(encoding="utf-8")
         example = KnowledgeExample(filename=data.example, source=source)
     return KnowledgeEntry.model_validate({**data.model_dump(), "example": example})
+
+
+def _lookup_part(part_id: str) -> KnowledgePart:
+    from bricklayer import lookup_part
+
+    return KnowledgePart.model_validate(lookup_part(part_id), from_attributes=True)
 
 
 @cache
