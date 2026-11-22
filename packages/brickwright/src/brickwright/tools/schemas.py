@@ -3,6 +3,7 @@
 from typing import Annotated, Any, Self
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic_core import PydanticCustomError
 
 from .software_rendering import MAX_ELEVATION
 
@@ -111,8 +112,10 @@ class RenderArgs(ToolArgs):
     @model_validator(mode="after")
     def paired_angles(self) -> Self:
         if (self.azimuth is None) != (self.elevation is None):
-            raise ValueError(
-                "give both azimuth and elevation, or neither for the contact sheet"
+            raise PydanticCustomError(
+                "missing_paired_argument",
+                "give both azimuth and elevation, or neither for the contact sheet",
+                {"parameter": "azimuth" if self.azimuth is None else "elevation"},
             )
         return self
 

@@ -31,7 +31,8 @@ from .driver.gallery import print_gallery
 from .driver.tracking import tally_failure
 from .prompts import system_prompt
 from .record import Record, Timing, ValidationFailures, list_records
-from .tools import FinalizationReport, RenderReport, ValidationReport
+from .tools import FinalizationReport, RenderReport, SnippetResult, ValidationReport
+from .tools import explore as explore_record
 from .tools import finalize as finalize_record
 from .tools import render as render_record
 from .tools import render_angle as render_angle_record
@@ -295,6 +296,26 @@ def validate(
 
 
 @external_app.command()
+def explore(
+    record_id: RecordId,
+    code: Annotated[
+        str,
+        typer.Option(
+            help="Python snippet to run with bricklayer and, when referenced, build"
+        ),
+    ],
+    records_dir: RecordsDir = Path(DEFAULT_RECORDS_DIR),
+    timeout: BuildTimeout = _DEFAULTS.build_timeout,
+) -> None:
+    """Inspect the catalog or the record's build and print its JSON result."""
+    config = Config(records_dir=records_dir, build_timeout=timeout)
+    record = Record.load(config, record_id)
+    with _track_command(record, "explore"):
+        result = explore_record(record, code, config)
+    _print_report(result)
+
+
+@external_app.command()
 def finalize(
     record_id: RecordId,
     records_dir: RecordsDir = Path(DEFAULT_RECORDS_DIR),
@@ -430,7 +451,7 @@ def _print_image_and_report(report: RenderReport) -> None:
 
 
 def _print_report(
-    report: ValidationReport | FinalizationReport | RenderReport,
+    report: ValidationReport | FinalizationReport | RenderReport | SnippetResult,
 ) -> None:
     """Print the report as JSON and exit nonzero if the operation failed."""
     print(report.model_dump_json(indent=2))
