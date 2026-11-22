@@ -50,15 +50,19 @@ and the scope of the physical checks. Legacy collision records identify the
 exact packaged mesh frame. Upstream mesh donors and transforms are unrecorded
 for those frames.
 
-With the frozen LDraw source tree available, this command checks the bundled
-index and writes a report of changed and missing entries.
+With the frozen LDraw 2026-10 tree available, these commands check the generated
+hinge geometry and reference poses, then compare the bundled index with its
+source data. The second command writes a report of changed and missing entries.
 
 ```sh
+python -m bricklayer.ldraw.scripts.extract_official_part_supplements --ldraw /path/to/ldraw --check
 python -m bricklayer.ldraw.scripts.extract_official_catalog --ldraw /path/to/ldraw --check --report catalog-report.json
 ```
 
-The same command with `--compare before.json after.json` compares two index
-files offline. The index includes the source tree and member checksums.
+After changing modeling data with `extract-part-data`, run the two release
+commands in the order shown, omitting `--check` to write the updated files.
+The catalog command also accepts `--compare before.json after.json` to compare
+two index files offline. The index includes the source tree and member checksums.
 
 ## API reference
 
