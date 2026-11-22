@@ -409,7 +409,7 @@ def build_report(output: Path, score_path: Path | None) -> dict[str, Any]:
         pending.append("final artifacts still need placement measurements")
     if any(row["artifact"] and row["score"] is None for row in all_rows):
         pending.append("final artifacts still need blinded scores")
-    if None in checks.values():
+    if None in checks.values() and False not in checks.values():
         pending.append("one or more comparisons have no denominator")
     return {
         "status": "pending"

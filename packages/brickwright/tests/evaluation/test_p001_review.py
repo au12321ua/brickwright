@@ -217,3 +217,40 @@ def test_rejects_altered_native_record(comparison):
     (record / "build.py").write_text("# updated after the run\n")
     with pytest.raises(ValueError, match="build.py changed"):
         p001_review.build_report(comparison, None)
+
+
+def test_observed_missing_product_can_fail_completion(comparison):
+    slot = next(
+        slot for slot in p001.slots(p001.load_plan(comparison)) if slot.arm == "new"
+    )
+    directory = slot.directory(comparison)
+    attempt_path = directory / "attempt.json"
+    attempt = p001.json_data(attempt_path)
+    record = directory / "records" / attempt["record_id"]
+    meta_path = record / "meta.json"
+    metadata = p001.json_data(meta_path)
+    metadata.update(
+        finalized=False, stop_reason="model_stopped", exported_source_sha256=None
+    )
+    p001.write_json(meta_path, metadata)
+    (record / "out" / "build.ldr").unlink()
+    attempt["exit_code"] = 1
+    attempt["meta_sha256"] = p001.digest(meta_path)
+    attempt["files"]["out/build.ldr"] = None
+    p001.write_json(attempt_path, attempt)
+    p001_review.prepare_review(comparison)
+    score_path = comparison / "review" / "scores.json"
+    scores = p001.json_data(score_path)
+    (old_id,) = scores["scores"]
+    scores["scores"][old_id] = {
+        "structure": 2,
+        "appearance": 2,
+        "function": 2,
+        "complete": True,
+        "notes": "All frozen requirements are met in this scoring fixture.",
+    }
+    p001.write_json(score_path, scores)
+    report = p001_review.build_report(comparison, score_path)
+    assert report["checks"]["connector_share_increased"] is None
+    assert report["checks"]["completion_maintained"] is False
+    assert report["status"] == "failed"
