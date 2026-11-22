@@ -53,6 +53,22 @@ which can produce false positives if they would also move in reality. This check
 and covers sampled poses, not every intermediate position. `build.check_motion()` exposes
 its detailed report for investigation. Static validity checks do not test motion.
 
+## Choosing a connection
+
+For regular courses and fills, use `add`, `stack`, and the grid helpers. For a
+side panel, an off-axis attachment, or a component that must move, start with
+the surfaces and axis the request needs. Use `find_connection_pairs` to choose
+supporting parts for `side`, `rotate`, `slide`, `clip`, `ball`, or `pin`.
+On an existing build, use `build.find_connection_candidates` with a placed
+part or a named sub-model path. Use `facing` and `toward` to pick a face or
+hole, and `MotionRange` and `opening_toward` to describe an opening piece.
+
+Run `build.trial_connections(candidates)` to inspect several mounting poses.
+Use a passing candidate with `build.place_connection`. If a trial fails, read
+its `diagnostics` for the endpoint, colliding parts, or sampled movement, then
+adjust the mount or clearance. When you already know both endpoints,
+`build.connect` provides direct placement.
+
 ## Working method
 
 1. Plan the defining features, rough size, support structure, and specialized parts.

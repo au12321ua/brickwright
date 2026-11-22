@@ -400,15 +400,17 @@ class LegoBuild(Cached, LegoGeometry):
         Pass an incoming `content` or search the catalog, optionally restricted
         to `part_ids`. Use `intent`, endpoint types, or `joint_kind` to narrow
         the interfaces. `facing` and `toward` select host endpoints in this
-        model's frame. By default the first candidates use quarter-turn clocking
-        where the rule permits it and center on usable portions of sliding spans.
+        model's frame. Applicable catalog-verified poses rank first within the
+        selected endpoints. Other candidates use quarter-turn clocking where
+        permitted and seat sliding pairs within spans that fit the requested travel.
 
         Explicit `mountings`, `target_rotation`, and `target_position` use the
         same fitting as `connect`. To filter by movement, give a `motion` and
         `opening_toward` in the model frame. The incoming `opening_point`
         defaults to the content's center. It must move in that direction from
         rest to `motion.upper` (or `motion.lower` if the upper bound is zero).
-        Collision and motion checks happen in `trial_connections`.
+        `trial_connections` checks colliding placements and any motion. It also
+        reports the actual joint kind when the geometry constrains its movement.
         """
         return find_connection_candidates(
             self,
