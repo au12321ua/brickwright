@@ -1,0 +1,59 @@
+{
+  "id": "steering-wheel-clearance",
+  "title": "Leave room for a steered wheel inside a fender",
+  "applicability": "Use when a road wheel swings into a fender, wheel arch, bumper or bodywork. Use the actual wheel and tire dimensions and the intended steering axis and range.",
+  "aliases": [
+    "tire rubs at full lock",
+    "wheel arch hits tire when turning",
+    "road wheel catches mudguard",
+    "front axle turning clearance",
+    "车轮转弯擦到车身",
+    "打满方向擦挡泥板",
+    "前轮蹭轮拱",
+    "转向净空"
+  ],
+  "topics": [
+    "vehicle",
+    "wheel arch",
+    "fender",
+    "steering",
+    "车辆",
+    "轮拱",
+    "挡泥板"
+  ],
+  "actions": [
+    "steer",
+    "sample clearance",
+    "notch fender",
+    "move fender"
+  ],
+  "parts": [
+    "3029",
+    "3680",
+    "3679",
+    "3003",
+    "4600",
+    "4624c01",
+    "3005"
+  ],
+  "diagnostics": [
+    "motion.collision"
+  ],
+  "steps": [
+    "Build a steering-side test rig before enclosing the whole axle. Attach the actual wheel and tire (4624c01 here) to the moving carrier. Mount a representative fender edge to the fixed chassis.",
+    "Check the centered wheel and sample both steering locks and angles between. If suspension is also modeled, evaluate steering at multiple ride heights with the same fender geometry.",
+    "Inspect the specific tire/fender sample. The example moves the fender corner one stud outward while keeping the steering travel. Compare that packaging choice with moving the pivot, which also changes the location of the tire throughout the range."
+  ],
+  "example": "steering_wheel_clearance.py",
+  "expected": "At 0° the wheel clears. The wheel and fender collide at +45° in the original rig. Moving the fender one stud clears all five samples from −45° to +45°.",
+  "sources": [
+    {
+      "author": "Carlos Antelo",
+      "title": "Steerable Technic front axle study",
+      "url": "https://github.com/anteloc/ldraw-nova/blob/d1e93d73f6ffe6955caa90953a98a0c90fbd5c5c/examples/8081-front-axle/GUIDE.md",
+      "license": "CC BY-SA 4.0",
+      "adaptation": "Reference only. The documented parent/steering layout inspired separating fixed bodywork from the moving wheel. The fixture is an original single-wheel clearance rig. The BrickWright guidance and example are original.",
+      "attribution_url": "https://github.com/anteloc/ldraw-nova/blob/d1e93d73f6ffe6955caa90953a98a0c90fbd5c5c/ATTRIBUTION.md"
+    }
+  ]
+}

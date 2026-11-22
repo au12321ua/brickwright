@@ -1,0 +1,58 @@
+{
+  "id": "sideways-and-inverted",
+  "title": "Mount a panel sideways or reverse the stud direction",
+  "applicability": "Use where exterior finish must sit on another face, or a detail needs studs pointing down. Look for a side stud and an underside or side socket intended to mate with it.",
+  "aliases": [
+    "SNOT",
+    "studs not on top",
+    "side-mounted tile",
+    "invert studs",
+    "upside-down brick",
+    "横装",
+    "侧装",
+    "倒装",
+    "翻转颗粒方向",
+    "外墙挂装饰",
+    "把窗饰挂在墙外侧"
+  ],
+  "topics": [
+    "façade",
+    "panel",
+    "trim",
+    "orientation",
+    "窗饰",
+    "外立面"
+  ],
+  "actions": [
+    "attach sideways",
+    "invert",
+    "clock around stud",
+    "mount"
+  ],
+  "parts": [
+    "11211",
+    "3024",
+    "4070"
+  ],
+  "diagnostics": [
+    "validation.connectivity",
+    "assembly.collision"
+  ],
+  "steps": [
+    "Find a side-facing open stud on a placed 11211. Mate a 3024's local antistud to it. Keep the part's back against the wall and verify its stud points outward.",
+    "For inversion, use the back-side antistud of a 4070 headlight brick on the other side stud and turn it 180° about the mating axis. The antistud's normal describes the mating axis, so the back-side socket in this example is selected with facing=Direction.FRONT.",
+    "Check the finished model against the wall above, below and behind the fitting. This joint seats at the connector locations, and the stud axis and panel clearance confirm the intended result."
+  ],
+  "example": "sideways_and_inverted.py",
+  "expected": "Both details connect to the core without collisions. The small plate's stud points outward and the inverted headlight brick's top stud points down.",
+  "sources": [
+    {
+      "author": "Carlos Antelo",
+      "title": "Build with studs facing sideways",
+      "url": "https://github.com/anteloc/ldraw-nova/blob/d1e93d73f6ffe6955caa90953a98a0c90fbd5c5c/docs/agent/guides/snot.md",
+      "license": "CC BY-SA 4.0",
+      "adaptation": "Reference only. The guide supplied design questions about facing, depth and the transition back to a regular grid. The BrickWright guidance and example are original.",
+      "attribution_url": "https://github.com/anteloc/ldraw-nova/blob/d1e93d73f6ffe6955caa90953a98a0c90fbd5c5c/ATTRIBUTION.md"
+    }
+  ]
+}

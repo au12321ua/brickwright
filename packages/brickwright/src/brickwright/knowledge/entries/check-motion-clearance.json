@@ -1,0 +1,66 @@
+{
+  "id": "check-motion-clearance",
+  "title": "Find interference between valid endpoint poses",
+  "applicability": "Use when a moving element can be posed at its stops but catches somewhere in between. Supply a real joint, an intended range and the stationary objects near the swept path.",
+  "aliases": [
+    "motion sweep interference",
+    "clear at both stops but catches halfway",
+    "collision while moving",
+    "moving joint clearance",
+    "运动间隙",
+    "中途卡住",
+    "静态通过运动干涉",
+    "打开过程中碰撞"
+  ],
+  "topics": [
+    "diagnosis",
+    "motion",
+    "clearance",
+    "gate",
+    "舱门",
+    "转动空间"
+  ],
+  "actions": [
+    "sample travel",
+    "sweep",
+    "check collisions",
+    "repair"
+  ],
+  "parts": [
+    "3032",
+    "3680",
+    "3679",
+    "3710",
+    "3005"
+  ],
+  "diagnostics": [
+    "motion.collision",
+    "motion.disconnected",
+    "motion.floating"
+  ],
+  "steps": [
+    "Check the rest pose and annotate the moving pivot and required range relative to rest. Keep attached parts rigid with the moving side and keep supports and obstacles on the fixed side.",
+    "Sample intermediate angles as well as rest and the two limits. Open the colliding sample using posed(), retaining the joint coordinates and both part names. In the example the gate and its post meet at 90° even though 0° and 180° are clear.",
+    "Move the obstruction or shift the pivot while preserving the intended travel. Run the same samples on the revision. Add samples around any tight gap when using the pattern on another build."
+  ],
+  "example": "check_motion_clearance.py",
+  "expected": "The original gate passes static checks at both endpoints, but motion.collision identifies gate and post at 90°. Relocating the post clears all seven samples and preserves the same 180° range.",
+  "sources": [
+    {
+      "author": "Carlos Antelo",
+      "title": "Review models",
+      "url": "https://github.com/anteloc/ldraw-nova/blob/d1e93d73f6ffe6955caa90953a98a0c90fbd5c5c/docs/agent/guides/review-models.md",
+      "license": "CC BY-SA 4.0",
+      "adaptation": "Reference only. The review workflow informed the evidence to capture for a failed pose. The BrickWright guidance and example are original.",
+      "attribution_url": "https://github.com/anteloc/ldraw-nova/blob/d1e93d73f6ffe6955caa90953a98a0c90fbd5c5c/ATTRIBUTION.md"
+    },
+    {
+      "author": "Carlos Antelo",
+      "title": "Openable cabin roof study",
+      "url": "https://github.com/anteloc/ldraw-nova/blob/d1e93d73f6ffe6955caa90953a98a0c90fbd5c5c/examples/6392-hinged-cabin-roof/GUIDE.md",
+      "license": "CC BY-SA 4.0",
+      "adaptation": "Reference only. The opening-roof study motivated checking the moving assembly together with its surroundings. The BrickWright guidance and example are original.",
+      "attribution_url": "https://github.com/anteloc/ldraw-nova/blob/d1e93d73f6ffe6955caa90953a98a0c90fbd5c5c/ATTRIBUTION.md"
+    }
+  ]
+}

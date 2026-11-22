@@ -1,0 +1,55 @@
+{
+  "id": "technic-pins-and-axles",
+  "title": "Choose a Technic pin, keyed axle hole or bearing",
+  "applicability": "Use when a beam joint must hold, slide or rotate. The shape of the hole, the fastener end and room to seat the fastener determine the applicable connection.",
+  "aliases": [
+    "Technic liftarm",
+    "cross axle versus friction pin",
+    "keyed shaft",
+    "round bearing",
+    "科技件销轴",
+    "十字轴孔",
+    "摩擦销",
+    "科技梁圆孔"
+  ],
+  "topics": [
+    "Technic",
+    "beams",
+    "mechanisms",
+    "bearing",
+    "科技件"
+  ],
+  "actions": [
+    "pin",
+    "seat an axle",
+    "slide",
+    "key shaft"
+  ],
+  "parts": [
+    "7229",
+    "3705",
+    "2780"
+  ],
+  "diagnostics": [
+    "connector.ambiguous",
+    "connector.incompatible",
+    "assembly.collision"
+  ],
+  "steps": [
+    "Identify the exact hole profile before selecting a shaft. A round hole can serve as a bearing in a supported pairing. A cross hole holds the clocking of a matching axle.",
+    "On 7229, seat the 3705 axle in the central axle_hole at a keyed angle. Choose one end of the 2780 pin and a specific outer pin_hole for the secondary connection.",
+    "Check both holes, projection and collision at the seated poses. Use recorded joint kinds to choose degrees of freedom. Retention or friction under real load calls for a physical check."
+  ],
+  "example": "technic_pins_and_axles.py",
+  "expected": "The beam, keyed axle and friction pin are connected and clear of mesh collisions in the seated configuration.",
+  "sources": [
+    {
+      "author": "Carlos Antelo",
+      "title": "Technic construction guide",
+      "url": "https://github.com/anteloc/ldraw-nova/blob/d1e93d73f6ffe6955caa90953a98a0c90fbd5c5c/docs/agent/guides/technic.md",
+      "license": "CC BY-SA 4.0",
+      "adaptation": "Reference only. The guide informed the choice to distinguish mounting roles within a single beam. The BrickWright guidance and example are original.",
+      "attribution_url": "https://github.com/anteloc/ldraw-nova/blob/d1e93d73f6ffe6955caa90953a98a0c90fbd5c5c/examples/technic-studies/sources.json"
+    }
+  ]
+}
