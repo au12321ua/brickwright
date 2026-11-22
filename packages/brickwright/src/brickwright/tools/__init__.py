@@ -4,6 +4,7 @@ from importlib import import_module
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
+    from .diagnostics import Diagnostic
     from .editing import edit_build, insert_build, multi_edit_build
     from .exploration import SnippetResult, explore
     from .finalization import FinalizationReport, finalize
@@ -20,6 +21,7 @@ if TYPE_CHECKING:
     from .validation import ValidationReport, validate
 
 _SUBMODULES = {
+    "diagnostics": ("Diagnostic",),
     "editing": ("edit_build", "insert_build", "multi_edit_build"),
     "exploration": ("SnippetResult", "explore"),
     "finalization": ("FinalizationReport", "finalize"),
@@ -39,6 +41,7 @@ _SOURCE = {name: module for module, names in _SUBMODULES.items() for name in nam
 
 __all__ = [
     "CheckResult",
+    "Diagnostic",
     "FinalizationReport",
     "RenderReport",
     "SnippetResult",

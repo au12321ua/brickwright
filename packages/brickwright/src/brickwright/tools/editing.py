@@ -3,15 +3,18 @@
 import difflib
 import re
 
+from bricklayer.diagnostics import DiagnosticError
+from pydantic import JsonValue
+
 from ..record import Record
 from .schemas import EditBuildArgs
 
 
-class ViewError(ValueError):
+class ViewError(DiagnosticError):
     """Raised when a view range is invalid."""
 
 
-class EditError(ValueError):
+class EditError(DiagnosticError):
     """Raised when an edit cannot be applied unambiguously."""
 
 
@@ -23,6 +26,7 @@ _CLOSEST_MATCH_FLOOR = 0.5
 
 # Lines of context around an edited region in the echoed snippet.
 _SNIPPET_CONTEXT = 4
+_MAX_MATCHES = 20
 
 
 def view(text: str, view_range: list[int] | None = None) -> str:
@@ -43,7 +47,14 @@ def view(text: str, view_range: list[int] | None = None) -> str:
         if not (1 <= start <= num and start <= end <= num):
             raise ViewError(
                 f"invalid view_range {view_range}: the file has lines 1..{num} "
-                f"(end may be -1 for end-of-file)"
+                f"(end may be -1 for end-of-file)",
+                code="edit.line_out_of_range",
+                evidence={
+                    "parameter": "view_range",
+                    "actual": [line for line in view_range],
+                    "line_count": num,
+                },
+                next_action="Choose an inclusive range within this file, or use -1 for the last line.",
             )
     lines = text.split("\n")[start - 1 : end]
     width = len(str(end))
@@ -100,10 +111,23 @@ def insert(text: str, insert_line: int, insert_text: str) -> str:
     if not 0 <= insert_line <= num:
         raise EditError(
             f"invalid insert_line {insert_line}: must be in 0..{num} "
-            f"(0 inserts at the top of the file; N inserts after line N)"
+            f"(0 inserts at the top of the file; N inserts after line N)",
+            code="edit.line_out_of_range",
+            evidence={
+                "parameter": "insert_line",
+                "actual": insert_line,
+                "minimum": 0,
+                "maximum": num,
+            },
+            next_action="Call read_build and choose an insertion line within the returned range.",
         )
     if not insert_text:
-        raise EditError("insert_text is empty; nothing to insert")
+        raise EditError(
+            "insert_text is empty; nothing to insert",
+            code="edit.empty_text",
+            evidence={"parameter": "insert_text"},
+            next_action="Pass the source lines to insert.",
+        )
     block = _split_lines(insert_text)
     lines = text.split("\n")
     return "\n".join(lines[:insert_line] + block + lines[insert_line:])
@@ -125,21 +149,24 @@ def str_replace(
     if not old_str:
         raise EditError(
             "old_str is empty; use insert_build to add new text or "
-            "write_build to rewrite the file"
+            "write_build to rewrite the file",
+            code="edit.empty_text",
+            evidence={"parameter": "old_str"},
+            next_action="Use insert_build to add new source or write_build to rewrite the file.",
         )
     if old_str == new_str:
-        raise EditError("old_str and new_str are identical; nothing to change")
+        raise EditError(
+            "old_str and new_str are identical; nothing to change",
+            code="edit.no_change",
+            evidence={"parameters": ["old_str", "new_str"]},
+            next_action="Pass the revised source as new_str.",
+        )
 
     count = text.count(old_str)
     if count == 1 or (count > 1 and replace_all):
         return text.replace(old_str, new_str)
     if count > 1:
-        at = ", ".join(str(n) for n in _occurrence_lines(text, old_str))
-        raise EditError(
-            f"old_str is not unique: it appears {count} times, at lines {at}. "
-            f"Enlarge old_str with surrounding context to pin down one "
-            f"occurrence, or pass replace_all=true to replace every occurrence."
-        )
+        raise _ambiguous_edit(_occurrence_lines(text, old_str), exact=True)
     return _whitespace_tolerant_replace(text, old_str, new_str, replace_all)
 
 
@@ -158,7 +185,13 @@ def apply_edits(text: str, edits: list[EditBuildArgs]) -> str:
         try:
             text = str_replace(text, edit.old_str, edit.new_str, edit.replace_all)
         except EditError as exc:
-            raise EditError(f"edit {i} of {total}: {exc}") from exc
+            raise EditError(
+                f"edit {i} of {total}: {exc}",
+                code=exc.code,
+                evidence=exc.evidence
+                | {"edit_index": i, "edit_count": total, "applied_edits": 0},
+                next_action=exc.next_action,
+            ) from exc
     return text
 
 
@@ -194,12 +227,7 @@ def _whitespace_tolerant_replace(
     if not starts:
         raise _no_match_error(text, old_str)
     if len(starts) > 1 and not replace_all:
-        at = ", ".join(str(i + 1) for i in starts)
-        raise EditError(
-            f"old_str matches {len(starts)} places once whitespace is "
-            f"normalized, at lines {at}. Enlarge old_str with surrounding "
-            f"context, or pass replace_all=true to replace every occurrence."
-        )
+        raise _ambiguous_edit([i + 1 for i in starts], exact=False)
 
     chosen, prev_end = [], -1
     for i in starts:  # replace_all: skip windows overlapping an earlier match
@@ -212,10 +240,33 @@ def _whitespace_tolerant_replace(
     return "\n".join(lines)
 
 
+def _ambiguous_edit(lines: list[int], *, exact: bool) -> EditError:
+    sampled = lines[:_MAX_MATCHES]
+    at = ", ".join(str(line) for line in sampled)
+    prefix = (
+        f"old_str is not unique: it appears {len(lines)} times"
+        if exact
+        else f"old_str matches {len(lines)} places once whitespace is normalized"
+    )
+    action = "Enlarge old_str with surrounding context, or pass replace_all=true to replace every occurrence."
+    return EditError(
+        f"{prefix}, at lines {at}. {action}",
+        code="edit.ambiguous",
+        evidence={
+            "parameter": "old_str",
+            "matches": len(lines),
+            "lines": [line for line in sampled],
+        },
+        next_action=action,
+    )
+
+
 def _no_match_error(text: str, old_str: str) -> EditError:
     """A not-found error rich enough for the model to self-correct."""
     parts = ["old_str not found."]
+    evidence: dict[str, JsonValue] = {"parameter": "old_str"}
     if _looks_line_numbered(old_str):
+        evidence["line_number_prefixes"] = True
         parts.append(
             "old_str looks like read_build output: the `N: ` line-number "
             "prefixes are display-only and must not be included in old_str."
@@ -224,7 +275,17 @@ def _no_match_error(text: str, old_str: str) -> EditError:
     if region is not None:
         start, end, snippet = region
         parts.append(f"Closest match, lines {start}-{end}:\n{snippet}")
-    return EditError("\n".join(parts))
+        evidence["closest_match"] = {
+            "start_line": start,
+            "end_line": end,
+            "snippet": snippet,
+        }
+    return EditError(
+        "\n".join(parts),
+        code="edit.no_match",
+        evidence=evidence,
+        next_action="Use source text from read_build without the line-number prefixes, then retry the edit.",
+    )
 
 
 def _looks_line_numbered(old_str: str) -> bool:

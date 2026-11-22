@@ -4,23 +4,27 @@ from __future__ import annotations
 
 import ast
 import io
-import traceback
 from contextlib import redirect_stdout
-
-from pydantic import BaseModel, ConfigDict
+from hashlib import sha256
+from pathlib import Path
 
 from ..config import Config
 from ..record import Record
 from . import build_execution
+from .diagnostics import (
+    DiagnosticReport,
+    captured_traceback,
+    exception_diagnostic,
+    source_read_diagnostic,
+)
 
 
-class SnippetResult(BaseModel):
+class SnippetResult(DiagnosticReport):
     """The outcome of one inspection snippet: did it run, and what it printed."""
-
-    model_config = ConfigDict(frozen=True)
 
     ok: bool
     output: str  # captured stdout on success; a labeled traceback on failure
+    source_sha256: str | None = None  # build.py digest when the snippet reads build
 
 
 def explore(record: Record, code: str, config: Config | None = None) -> SnippetResult:
@@ -35,20 +39,48 @@ def explore(record: Record, code: str, config: Config | None = None) -> SnippetR
         _explore,
         (str(record.build_path), code),
         config.build_timeout,
-        lambda e: SnippetResult(ok=False, output=f"Explore failed: {e}"),
+        lambda e: SnippetResult(
+            ok=False,
+            output=f"Explore failed: {e}",
+            diagnostics=[
+                build_execution.subprocess_diagnostic(
+                    e, "explore", config.build_timeout
+                )
+            ],
+        ),
     )
 
 
 def _explore(build_path: str, code: str) -> SnippetResult:
-    scope = {}
-    if _reads_build(code):
-        try:
-            scope["build"] = build_execution.create_build(build_path)
-        except Exception:
-            return SnippetResult(
-                ok=False, output=f"build error:\n{traceback.format_exc()}"
-            )
-    return _run_snippet(code, scope)
+    if not _reads_build(code):
+        return _run_snippet(code, {})
+
+    try:
+        source = Path(build_path).read_bytes().decode("utf-8")
+    except (OSError, UnicodeError) as exc:
+        return SnippetResult(
+            ok=False,
+            output=f"build error:\n{exc}",
+            diagnostics=[source_read_diagnostic(exc)],
+        )
+    digest = sha256(source.encode()).hexdigest()
+    stage = "load_build"
+    try:
+        with redirect_stdout(io.StringIO()):
+            module = build_execution.load_build_module(build_path, source)
+            stage = "create_build"
+            build = module.create_build()
+    except Exception as exc:
+        return SnippetResult(
+            ok=False,
+            output=f"build error:\n{captured_traceback(exc, build_path, source)}",
+            source_sha256=digest,
+            diagnostics=[
+                exception_diagnostic(exc, stage, filename=build_path, source=source)
+            ],
+        )
+    result = _run_snippet(code, {"build": build})
+    return result.model_copy(update={"source_sha256": digest})
 
 
 def _reads_build(code: str) -> bool:
@@ -70,15 +102,20 @@ def _run_snippet(code: str, scope: dict) -> SnippetResult:
 
     namespace = {"bricklayer": bricklayer, **scope}
     buf = io.StringIO()
+    filename = "<explore>"
     try:
         with redirect_stdout(buf):
-            exec(compile(code, "<explore>", "exec"), namespace)
-    except Exception:
+            exec(compile(code, filename, "exec"), namespace)
+    except Exception as exc:
         printed = build_execution.cap_output(buf.getvalue())
         if printed and not printed.endswith("\n"):
             printed += "\n"
         return SnippetResult(
-            ok=False, output=f"{printed}explore error:\n{traceback.format_exc()}"
+            ok=False,
+            output=f"{printed}explore error:\n{captured_traceback(exc, filename, code)}",
+            diagnostics=[
+                exception_diagnostic(exc, "explore", filename=filename, source=code)
+            ],
         )
 
     out = build_execution.cap_output(buf.getvalue())
