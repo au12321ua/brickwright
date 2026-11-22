@@ -11,7 +11,7 @@ from ..construction import COMPONENT_TYPES, CONSTRUCTION_HELPERS, VARIANT_ENUMS,
 from ..construction.registry import COMPONENT_FACTORIES, valid_part_kwarg_combos
 from ..geometry import PLATE, HeightLike, connections
 from ..ldraw import get_connector_type
-from ..modeling import articulation, transforms
+from ..modeling import articulation, assembly, transforms
 from ..modeling.build import LegoBuild, NameRef
 from ..modeling.placement import Placement
 from ..modeling.transforms import BUILD_TRANSFORMATIONS
@@ -173,6 +173,10 @@ def api_reference() -> str:
                         "add",
                         "add_raw",
                         "connect",
+                        "connection_endpoints",
+                        "find_connection_candidates",
+                        "trial_connections",
+                        "place_connection",
                         "joint",
                         "set_motion",
                         "posed",
@@ -190,6 +194,61 @@ def api_reference() -> str:
                     ),
                 ),
                 ("NameRef", NameRef),
+            ],
+            3,
+        ),
+        document_module(assembly),
+        document_definitions(
+            [
+                assembly.AssemblyIntent,
+                assembly.find_connection_pairs,
+                ClassDoc(
+                    assembly.ConnectionEndpoint,
+                    members=("part_id", "connector", "path"),
+                    constructor=False,
+                ),
+                ClassDoc(
+                    assembly.ConnectionPair,
+                    members=(
+                        "parent",
+                        "child",
+                        "joint_kind",
+                        "pose",
+                        "mounting",
+                        "verification_scope",
+                        "reason",
+                        "requires_trial",
+                    ),
+                    constructor=False,
+                ),
+                ClassDoc(
+                    assembly.ConnectionCandidate,
+                    members=(
+                        "parent",
+                        "child",
+                        "content",
+                        "joint_kind",
+                        "pose",
+                        "mounting",
+                        "slide_ranges",
+                        "reason",
+                        "verification_scope",
+                    ),
+                    constructor=False,
+                ),
+                ClassDoc(
+                    assembly.ConnectionTrial,
+                    members=(
+                        "candidate",
+                        "passed",
+                        "checks",
+                        "diagnostics",
+                        "joint_kind",
+                        "motion_report",
+                    ),
+                    constructor=False,
+                ),
+                ClassDoc(assembly.AssemblyError, members=(), constructor=False),
             ],
             3,
         ),
