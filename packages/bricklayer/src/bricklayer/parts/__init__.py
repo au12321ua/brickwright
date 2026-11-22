@@ -33,6 +33,7 @@ API dimensions from a name. LEGO's "Slope 45 2 x 3" is a 3x2 slope in the API.
 from ..ldraw.naming import Chirality
 from .catalog import InvalidPartError, PartSpec, part_exists
 from .element import Element
+from .mountings import VerifiedMounting, verified_mountings
 from .official import (
     OFFICIAL_PARTS_VERSION,
     CapabilityStatus,
@@ -71,6 +72,7 @@ DISCOVERY = [
     parts_with_connectors,
     official_part_ids,
     official_catalog_summary,
+    verified_mountings,
 ]
 
 __all__ = (
@@ -84,6 +86,7 @@ __all__ = (
         "PartDataSource",
         "PartEndpoint",
         "PartKind",
+        "VerifiedMounting",
     ]
     + [obj.__name__ for obj in CATALOG_TYPES]
     + [obj.__name__ for obj in DISCOVERY]

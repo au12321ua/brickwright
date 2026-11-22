@@ -37,12 +37,18 @@ assert visual.constructible.reason_code == "missing_collision_mesh"
 
 hinges = bl.search_official_parts("hinge plate", constructible=True, connectivity=True)
 side_studs = bl.lookup_part("11211").endpoints
+hook_mountings = bl.lookup_part("2651").verified_mountings
 ```
 
 Endpoint positions use studs on x/y and bricks on z in the part's local frame.
 Each endpoint also carries its raw LDraw position in LDU, its frame transform,
 and its annotation source. `PartSpec`, `Element`, and `search_parts` use the
 SDK modeling catalog.
+
+Verified mountings give the two part IDs, endpoint indices, a relative pose,
+and the scope of the physical checks. Legacy collision records identify the
+exact packaged mesh frame. Upstream mesh donors and transforms are unrecorded
+for those frames.
 
 With the frozen LDraw source tree available, this command checks the bundled
 index and writes a report of changed and missing entries.
