@@ -15,10 +15,17 @@ Placement methods append by default; `index` inserts before a top-level position
 (negative indices count from the end).
 """
 
-from . import articulation, build, transforms
+from . import articulation, assembly, build, transforms
 from .articulation import *
+from .assembly import *
 from .build import *
 from .placement import Placement
 from .transforms import *
 
-__all__ = articulation.__all__ + build.__all__ + ["Placement"] + transforms.__all__
+__all__ = (
+    articulation.__all__
+    + assembly.__all__
+    + build.__all__
+    + ["Placement"]
+    + transforms.__all__
+)
