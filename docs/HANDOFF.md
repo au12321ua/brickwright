@@ -21,6 +21,8 @@
 - 搭建问题、零件号和诊断码可交给 `brickwright knowledge search`，再用 `brickwright knowledge show` 读取步骤、可执行示例和来源。[知识库验收结果](proposals/archive/P-002-construction-knowledge.md#实现与验收结果)
 - `bricklayer.lookup_part` 可离线查询 LDraw 2026-10 的全部 24,985 个官方顶层 ID，返回建模及碰撞能力、端点、已验证安装姿态或数据缺项。[覆盖统计与数据限制](proposals/archive/P-003-official-part-coverage.md#实现与验收结果)
 
-P-001 的 Maestro 外部代理首轮对照未通过连接占比条件。铰链修复已覆盖需要反向安装的完整舱门，知识库的 `hinged-panels` 示例可直接运行。后续配对固定 `52a813a` 和 `6aba106`，分别报告原五题和两道新功能题，每题每版重复两次。原生代理对照另行统计。[配对说明](design/p001-paired-evaluation.md#maestro-外部代理对照)
+P-001 的 Maestro 外部代理首轮对照未通过连接占比条件。补全反向安装候选，并加入整扇门试装的可执行示例后，原五题每版各做两次，连接放置从 40/235 升至 56/239，两版均完成 10/10，质量均分均为 6/6。附加两题两版均完成 3/4。修复后的四个舱门试次全部采用候选试装，原生代理的整体验收仍待运行。[评测报告](design/p001-paired-evaluation.md#铰链修复复测结果) · [复测快照](http://localhost:8420/snapshots/snp_01m81459cgpjb3nee5gkwjz5tt)
 
 本次集成的 pytest 在启用冻结清单比对后通过 3,069 项，跳过 6 项。用本地 LDraw 库单独复跑其中两项渲染测试均通过，其余为三项需要原始 BrickNet 输入的提取测试和一项真实模型测试。两套发布数据生成器的 `--check`、Ruff 和 ty 均通过。从两个 wheel 在仓库外重查了官方全集，并试装了能通过五个姿态采样的铰链。
+
+铰链修复分支配置本地 LDraw 库后，pytest 通过 3,072 项，跳过 4 项（三项缺原始 BrickNet 输入，一项为按需启用的原生代理实测）。Ruff 检查、格式检查和 ty 均通过。
