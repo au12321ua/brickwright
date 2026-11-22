@@ -347,3 +347,41 @@ def test_static_check_evidence_names_repeated_submodel_occurrences():
         ("left", "leaf"),
         ("right", "leaf"),
     }
+
+
+def test_missing_connector_annotations_use_official_catalog_facts(
+    record, config, in_process
+):
+    from bricklayer import lookup_part, parts_with_connectors
+
+    snippet = (
+        'bricklayer.Element("10040", bricklayer.Color.RED).find_connector("hinge_7_in")'
+    )
+    tool = execute_tool(record, config, "explore", {"code": snippet})
+    cli = _external(record, config, "explore", "--code", snippet)
+    assert cli["diagnostics"] == json.loads(tool.content)["diagnostics"]
+    (issue,) = cli["diagnostics"]
+    capabilities = lookup_part("10040")
+    assert issue["stage"] == "explore"
+    assert issue["code"] == "catalog.missing_data"
+    assert issue["evidence"]["part_id"] == capabilities.part_id
+    assert issue["evidence"]["version"] == capabilities.version
+    assert issue["evidence"]["reason_code"] == capabilities.connectivity.reason_code
+    assert issue["evidence"]["parts_with_connector"] == list(
+        parts_with_connectors("hinge_7_in")[:5]
+    )
+    assert "lookup_part" in issue["next_action"]
+
+
+def test_a_nonexistent_catalog_id_is_distinct_from_missing_annotations(
+    record, config, in_process
+):
+    snippet = 'bricklayer.PartSpec("diagnostic-fixture-outside-release")'
+    tool = execute_tool(record, config, "explore", {"code": snippet})
+    cli = _external(record, config, "explore", "--code", snippet)
+    assert cli["diagnostics"] == json.loads(tool.content)["diagnostics"]
+    (issue,) = cli["diagnostics"]
+    assert issue["stage"] == "explore"
+    assert issue["code"] == "catalog.unknown_part"
+    assert issue["evidence"]["part_id"] == "diagnostic-fixture-outside-release"
+    assert issue["evidence"]["reason_code"] == "part_outside_version"
