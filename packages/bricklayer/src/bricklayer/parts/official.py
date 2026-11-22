@@ -6,7 +6,7 @@ import json
 import re
 from collections import defaultdict
 from collections.abc import Iterable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import StrEnum
 from functools import cache, cached_property
 from typing import Any, ClassVar, Literal, NotRequired, TypedDict
@@ -16,6 +16,7 @@ from ..ldraw import partdata
 from ..ldraw.connectivity import ConnectorRaw
 from ..ldraw.conversion import LDrawVec
 from ..ldraw.meshes import DATA_DIR
+from .mountings import VerifiedMounting, verified_mountings
 
 OFFICIAL_PARTS_VERSION = "2026-10"
 
@@ -255,6 +256,20 @@ class PartCapabilities:
             sorted(related.union(self.aliases, self.variants, self.component_ids))
         )
 
+    @cached_property
+    def verified_mountings(self) -> tuple[VerifiedMounting, ...]:
+        """Verified fits involving this part or using its official shortcut."""
+        if self._row is None:
+            return ()
+        if self.kind != PartKind.ASSEMBLY:
+            return verified_mountings(self.part_id)
+        source = f"parts/{self.part_id}.dat"
+        return tuple(
+            row
+            for row in verified_mountings()
+            if self.part_id in row.part_ids or source in row.sources
+        )
+
     @property
     def limitations(self) -> tuple[str, ...]:
         """Modeling limits implied by the entry's documented role."""
@@ -373,6 +388,7 @@ class PartCapabilities:
                 url="https://github.com/kulits/BrickNet",
                 author="Peter Kulits and the LDraw part contributors",
                 license="MIT with LDraw attribution in NOTICE",
+                note="Upstream mesh donor and transform are unrecorded for this packaged frame.",
             )
         return PartCapability(
             CapabilityStatus.AVAILABLE,
@@ -505,12 +521,8 @@ class PartCapabilities:
         supplement = self._supplement().get("connectors", {}).get(name)
         if supplement is None:
             return source
-        return PartDataSource(
-            source.file,
-            source.part_id,
-            source.sha256,
-            author=source.author,
-            license=source.license,
+        return replace(
+            source,
             note=supplement["method"],
             citations=self._supplement_files(supplement["files"]),
         )
