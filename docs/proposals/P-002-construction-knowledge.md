@@ -1,6 +1,6 @@
 # P-002 — 按搭建问题检索的 BrickWright 知识库
 
-Status: draft
+Status: accepted
 
 ## 问题与目标
 

@@ -1,6 +1,6 @@
 # P-003 — LDraw 2026-10 全量索引与可验证装配覆盖
 
-Status: draft
+Status: accepted
 
 ## 覆盖承诺与基线
 
