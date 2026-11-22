@@ -5,7 +5,8 @@ below and distributed under their terms.
 LDraw.org Parts Library
 -----------------------
 
-Files:    part_geometry.json, part_taxonomy.json, meshes/
+Files:    official_catalog_2026-10.json, part_geometry.json, part_taxonomy.json,
+          meshes/
 Creators: the LDraw.org part authors, as named in each part file's header
 Source:   https://library.ldraw.org/
 License:  CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/); parts
@@ -13,16 +14,20 @@ License:  CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/); parts
           (https://creativecommons.org/licenses/by/2.0/)
 Changes:  part bounding boxes are measured from the part files, and part
           descriptions are copied from their first lines; the collision meshes
-          are converted from the part files via BrickNet.
+          are converted from the part files via BrickNet. The official release
+          index summarizes the LDraw source headers, identity relationships and
+          visual dependency checks, with creator and license per entry.
 
 
 BrickNet
 --------
 
-Files:    part_connectivity.json, meshes/
+Files:    official_catalog_2026-10.json, part_connectivity.json, meshes/
 Source:   https://github.com/kulits/BrickNet
 Changes:  connector labels are re-expressed as BrickLayer connectors; collision
-          meshes are transformed into the LDraw frame and Draco-compressed.
+          meshes are transformed into the LDraw frame and Draco-compressed. The
+          release index records the packaged labels, donor transforms and mesh
+          frames used by BrickLayer.
 
 MIT License
 

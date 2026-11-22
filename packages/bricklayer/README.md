@@ -23,6 +23,37 @@ assert model.is_valid()  # no collisions, nothing floating
 bl.write_ldraw(model, "tower.ldr")  # open in any LDraw viewer
 ```
 
+## Official part queries
+
+`lookup_part` and `search_official_parts` cover every top-level ID in the bundled
+LDraw 2026-10 index. Each result gives its source, related IDs, and separate
+statuses for visual geometry, construction, collision meshes, and endpoints.
+These queries run offline with the SDK package.
+
+```python
+visual = bl.lookup_part("102525")
+assert visual.geometry.available
+assert visual.constructible.reason_code == "missing_collision_mesh"
+
+hinges = bl.search_official_parts("hinge plate", constructible=True, connectivity=True)
+side_studs = bl.lookup_part("11211").endpoints
+```
+
+Endpoint positions use studs on x/y and bricks on z in the part's local frame.
+Each endpoint also carries its raw LDraw position in LDU, its frame transform,
+and its annotation source. `PartSpec`, `Element`, and `search_parts` use the
+SDK modeling catalog.
+
+With the frozen LDraw source tree available, this command checks the bundled
+index and writes a report of changed and missing entries.
+
+```sh
+python -m bricklayer.ldraw.scripts.extract_official_catalog --ldraw /path/to/ldraw --check --report catalog-report.json
+```
+
+The same command with `--compare before.json after.json` compares two index
+files offline. The index includes the source tree and member checksums.
+
 ## API reference
 
 For the full API reference, see `bricklayer.api_reference()` or run the following command:

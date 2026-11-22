@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 from collections.abc import Iterable, Iterator
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from functools import cached_property
 from typing import TYPE_CHECKING, Generic, TypeVar
 
 from .._mixins import Cached
+from ..diagnostics import DiagnosticError, connector_evidence
 from ..geometry import (
     Anchor,
     Connector,
@@ -188,7 +189,15 @@ def connect_placement(
     """
     rule = mating_rule(connector.type, to.type)
     if rule is None:
-        raise ValueError(f"{connector.type.name} and {to.type.name} cannot mate")
+        raise DiagnosticError(
+            f"{connector.type.name} and {to.type.name} cannot mate",
+            code="connector.incompatible",
+            evidence={
+                "source_connector": connector_evidence(connector),
+                "target_connector": connector_evidence(to),
+            },
+            next_action="Use find_connectors() to choose compatible endpoints before calling connect.",
+        )
     pose = mate_pose(connector, to)
     if target_rotation is not None or target_position is not None:
         rotation = (
@@ -208,7 +217,25 @@ def connect_placement(
         )
         pose = mounting_pose(fitted, to, rule.joint).compose(pose)
     if mounting is not None:
-        pose = mounting_pose(mounting, to, rule.joint).compose(pose)
+        try:
+            pose = mounting_pose(mounting, to, rule.joint).compose(pose)
+        except ValueError as exc:
+            raise DiagnosticError(
+                str(exc),
+                code="connector.unsolved_pose",
+                evidence={
+                    "source_connector": connector_evidence(connector),
+                    "target_connector": connector_evidence(to),
+                    "joint_kind": rule.joint.name.lower(),
+                    "mounting": {
+                        field.name: getattr(mounting, field.name)
+                        if field.name == "flip"
+                        else float(getattr(mounting, field.name))
+                        for field in fields(mounting)
+                    },
+                },
+                next_action="Adjust the mounting parameters to the reported joint's degrees of freedom.",
+            ) from exc
     return Placement(content, pose)
 
 

@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from functools import cache
+from typing import TYPE_CHECKING
 
+from ..diagnostics import DiagnosticError
 from ..geometry.linalg import Axis
 from ..ldraw import partdata
 from ..ldraw.naming import Chirality
@@ -12,13 +14,16 @@ from ..ldraw.partdata import TaxonomyRecord
 from .derivation import derived_shape
 from .shape import PartShape
 
+if TYPE_CHECKING:
+    from pydantic import JsonValue
+
 #: The plane a handed part's counterpart is reflected across: "Left" and
 #: "Right" name the two sides of the left/right plane, whatever axis a given
 #: reflection uses.
 HANDEDNESS_AXIS = Axis.X
 
 
-class InvalidPartError(ValueError):
+class InvalidPartError(DiagnosticError):
     """Raised when a part is named that does not exist: an uncatalogued LDraw
     id, out of :class:`PartSpec`, or attributes no part carries, out of
     a convenience factory."""
@@ -45,7 +50,27 @@ class PartSpec:
         """Resolve the part's LDraw description; reject an uncatalogued id."""
         record = partdata.taxonomy(self.ldraw_id)
         if record is None or not part_exists(self.ldraw_id):
-            raise InvalidPartError(f"{self.ldraw_id!r} is not a catalogued LDraw part")
+            from .official import lookup_part
+
+            part = lookup_part(self.ldraw_id)
+            missing_data = part.in_version and not part.constructible.available
+            reason = part.constructible.reason if missing_data else ""
+            message = f"{self.ldraw_id!r} is not a catalogued LDraw part"
+            evidence: dict[str, JsonValue] = {
+                "part_id": self.ldraw_id,
+                "version": part.version,
+            }
+            if missing_data:
+                message += f". {reason}"
+                evidence["reason_code"] = part.constructible.reason_code
+            elif not part.in_version:
+                evidence["reason_code"] = part.constructible.reason_code
+            raise InvalidPartError(
+                message,
+                code="catalog.missing_data" if missing_data else "catalog.unknown_part",
+                evidence=evidence,
+                next_action="Use lookup_part(part_id) to inspect the official catalog and available data.",
+            )
         object.__setattr__(self, "_ldraw", record)
 
     @property
