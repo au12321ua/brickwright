@@ -22,6 +22,7 @@ from typing import Any
 
 from ..naming import part_name
 from .fallbacks import PartFallbacks, PartSource
+from .official_mesh import GENERATED_MESH_IDS
 from .selection import select_part_ids
 
 # Conventional system-wide LDraw library locations, in search order.
@@ -215,7 +216,10 @@ def catalog_sources(
     mesh_dir = mesh_dir or find_bricknet_meshes()
     bricknet_data = bricknet_data or find_bricknet_data()
     labels = load_labels(bricknet_data)
-    meshes = PartFallbacks(lib).sources(lib.descriptions, mesh_part_ids(mesh_dir))
+    available_meshes = set(mesh_part_ids(mesh_dir)) | (
+        GENERATED_MESH_IDS & lib.descriptions.keys()
+    )
+    meshes = PartFallbacks(lib).sources(lib.descriptions, available_meshes)
     connectivity = PartFallbacks(lib, load_alias_sources(bricknet_data)).sources(
         lib.descriptions.keys() | labels.keys(), labels
     )

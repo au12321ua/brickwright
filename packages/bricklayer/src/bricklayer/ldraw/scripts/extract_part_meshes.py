@@ -8,6 +8,7 @@ it. The PLYs store Z negated relative to LDraw, which this script undoes.
 
 Missing PLYs are resolved through rigid redirects and decoration variants;
 donor geometry is transformed into the requested part's own LDraw frame.
+Parts with a supplemental recipe are generated from the official geometry.
 
 Parts are filed by LDraw category, read from the official library at
 ``$LDRAW_LIBRARY_PATH``, and written as one Draco-compressed zip per category so
@@ -32,6 +33,7 @@ from .library import (
     redirect_target,
     report_membership,
 )
+from .official_mesh import GENERATED_MESH_IDS, official_mesh
 
 OUTPUT = DATA_DIR / "meshes"
 
@@ -85,7 +87,10 @@ def main(argv: list[str] | None = None) -> int:
     if args.check:
         return _report_against_committed(categories, args.output)
 
-    write_store(args.output, _read_meshes(mesh_dir, categories, sources))
+    write_store(
+        args.output,
+        _read_meshes(mesh_dir, categories, sources, lib=None if args.all else lib),
+    )
     print(f"Wrote {len(categories)} meshes to {args.output}")
     return 0
 
@@ -123,12 +128,20 @@ def _read_meshes(
     mesh_dir: Path,
     categories: dict[str, str],
     sources: dict[str, PartSource],
+    *,
+    lib: Library | None = None,
 ) -> dict[str, tuple[str, Mesh]]:
-    """Each categorized part's donor PLY, transformed into its own LDraw frame."""
+    """Each categorized part's collider, transformed into its own LDraw frame."""
     meshes = {}
+    generated: dict[str, Mesh] = {}
     for part_id, category in categories.items():
         source = sources[part_id]
-        mesh = read_ply(mesh_dir / f"{source.part_id}.ply")
+        if lib is not None and source.part_id in GENERATED_MESH_IDS:
+            if source.part_id not in generated:
+                generated[source.part_id] = official_mesh(lib, source.part_id)[0]
+            mesh = generated[source.part_id]
+        else:
+            mesh = read_ply(mesh_dir / f"{source.part_id}.ply")
         matrix, offset = pose_to_ldraw(source.pose)
         meshes[part_id] = (
             category,

@@ -305,6 +305,13 @@
     "frame_slot"
    ],
    "joint": "FIXED"
+  },
+  {
+   "types": [
+    "hook_slide_arm",
+    "hook_slide_channel"
+   ],
+   "joint": "PRISMATIC"
   }
  ]
 }

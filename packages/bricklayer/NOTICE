@@ -5,18 +5,23 @@ below and distributed under their terms.
 LDraw.org Parts Library
 -----------------------
 
-Files:    official_catalog_2026-10.json, part_geometry.json, part_taxonomy.json,
-          meshes/
+Files:    official_catalog_2026-10.json, official_part_supplements.json,
+          part_geometry.json, part_taxonomy.json, meshes/
 Creators: the LDraw.org part authors, as named in each part file's header
 Source:   https://library.ldraw.org/
 License:  CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/); parts
           edited before 2023-03-05 also carry CC BY 2.0
           (https://creativecommons.org/licenses/by/2.0/)
 Changes:  part bounding boxes are measured from the part files, and part
-          descriptions are copied from their first lines; the collision meshes
-          are converted from the part files via BrickNet. The official release
-          index summarizes the LDraw source headers, identity relationships and
+          descriptions are copied from their first lines. The official release
+          index summarizes the source headers, identity relationships and
           visual dependency checks, with creator and license per entry.
+          Most collision meshes are converted from the part files via BrickNet.
+          The 53923 collision mesh is generated from the official 2026-10
+          LDraw triangles in the same local frame, voxelized and inset.
+          official_part_supplements.json identifies the mesh inputs and credits
+          their authors, and records the connector sources and the relative
+          poses from Bernd Broich's 2651c01-f1 and 2651c01-f2 shortcuts.
 
 
 BrickNet
