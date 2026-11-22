@@ -64,4 +64,6 @@ Status: accepted
 
 SDK 与代理指引已接入配对查询、模型内候选、试装和提交。诊断贯通内置工具与外部 CLI，可按原因码查询知识库。两孔零件的回归用例从验证失败开始，定位到具体零件与歧义端点，通过指南修正后重新导出。[装配 SDK](../../packages/bricklayer/src/bricklayer/modeling/assembly.py) · [执行诊断](../design/validation-and-export.md#代理收到的诊断) · [修复回归](../../packages/brickwright/tests/tools/test_connection_repair.py)
 
-五道无连接提示的任务、统一预算、成品来源计数和盲评工具已实现并完成离线回归。用户选择「本轮先实现，真实对照另行安排」，因此连接放置比例、成品质量和任务完成度的真实对照结果仍待测量。P-001 保持 `accepted`，真实对照三项均达标后再结项。[配对评测用法](../design/p001-paired-evaluation.md)
+原生代理的五道任务、统一预算、成品来源计量和盲评工具已完成离线回归。Maestro 外部代理首轮成品质量和完成度持平，连接放置占比从 20.6% 降到 16.8%。P-001 保持 `accepted`。[配对协议与外部实验](../design/p001-paired-evaluation.md#maestro-外部代理对照)
+
+针对该轮舱门的复现，默认候选会在原安装方向之外尝试反向的转动关节。明确给定的安装姿态和目标旋转沿用原有拟合方式。每对转动端点最多增加四个反向安装角度，既有试装上限仍为八个。完整门板放在子模型内进行试装，碰撞和运动检查会包含门板与箱体。修复版按默认上限回放归档的 41 件舱门，八个候选中第七个通过，指定向上开启时四个中的第三个通过。闭合至 90° 每隔 15° 的成品几何与原件逐件相同，31 个运动采样通过。[实现](../../packages/bricklayer/src/bricklayer/modeling/assembly.py) · [可执行示例](../../packages/brickwright/src/brickwright/knowledge/examples/hinged_panels.py)

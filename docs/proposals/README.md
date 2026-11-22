@@ -14,7 +14,7 @@
 | P-002 | completed | [按搭建问题检索的 BrickWright 知识库](archive/P-002-construction-knowledge.md) |
 | P-003 | completed | [LDraw 2026-10 全量索引与可验证装配覆盖](archive/P-003-official-part-coverage.md) |
 
-P-001 已实现并通过离线验收。按用户安排，真实新旧代理对照留待后续，行为指标仍待验证。[配对评测说明](../design/p001-paired-evaluation.md)
+P-001 已通过离线验收。首轮 Maestro 外部代理对照的质量与完成度持平，连接放置占比下降。后续配对单独测量铰链修复，原生代理的行为验收仍待运行。[配对评测说明](../design/p001-paired-evaluation.md)
 
 ## 并行开发约定
 
