@@ -15,6 +15,7 @@ from typing import Any, Generic, TypeVar
 from pydantic import ValidationError
 
 from ..config import Config
+from ..knowledge import read_knowledge, search_knowledge
 from ..record import Record, Usage, UsageTracker
 from .editing import (
     EditError,
@@ -39,7 +40,9 @@ from .schemas import (
     InsertBuildArgs,
     MultiEditBuildArgs,
     ReadBuildArgs,
+    ReadBuildingKnowledgeArgs,
     RenderArgs,
+    SearchBuildingKnowledgeArgs,
     ToolArgs,
     ValidateArgs,
     WriteBuildArgs,
@@ -180,6 +183,27 @@ def _explore(record: Record, config: Config, args: ExploreArgs) -> ToolOutcome:
     return ToolOutcome(result.output, ok=result.ok)
 
 
+def _search_building_knowledge(
+    record: Record,
+    config: Config,
+    args: SearchBuildingKnowledgeArgs,
+) -> ToolOutcome:
+    result = search_knowledge(args.query, limit=args.limit)
+    return ToolOutcome(result.model_dump_json())
+
+
+def _read_building_knowledge(
+    record: Record,
+    config: Config,
+    args: ReadBuildingKnowledgeArgs,
+) -> ToolOutcome:
+    try:
+        entry = read_knowledge(args.entry_id)
+    except KeyError:
+        return ToolOutcome(f"Unknown knowledge entry {args.entry_id!r}.", ok=False)
+    return ToolOutcome(entry.model_dump_json())
+
+
 def _render(record: Record, config: Config, args: RenderArgs) -> ToolOutcome:
     """Render the contact sheet, or a single view when a camera angle is given."""
     if args.azimuth is None:
@@ -225,6 +249,12 @@ _TOOLS: dict[str, _Tool[Any]] = {
     "render": _Tool(RenderArgs, _render),
     "finalize": _Tool(FinalizeArgs, _finalize),
     "dispatch_subagents": _Tool(DispatchArgs, _dispatch),
+    "search_building_knowledge": _Tool(
+        SearchBuildingKnowledgeArgs, _search_building_knowledge
+    ),
+    "read_building_knowledge": _Tool(
+        ReadBuildingKnowledgeArgs, _read_building_knowledge
+    ),
 }
 _ALL_TOOLS = [function_tool(name, tool.arguments) for name, tool in _TOOLS.items()]
 
