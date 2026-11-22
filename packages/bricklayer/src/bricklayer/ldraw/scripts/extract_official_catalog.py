@@ -6,6 +6,7 @@ import argparse
 import json
 import tempfile
 from collections import Counter, defaultdict
+from dataclasses import asdict
 from hashlib import sha256
 from pathlib import Path
 from stat import S_IMODE
@@ -14,6 +15,7 @@ from zipfile import ZipFile
 import numpy as np
 
 from ...geometry import Connector, Pose
+from ...parts.mountings import verified_mountings
 from ...parts.official import (
     _CATALOG_SCHEMA,
     OFFICIAL_PARTS_VERSION,
@@ -31,6 +33,7 @@ from .official_snapshot import scan_snapshot
 
 _OUTPUT = DATA_DIR / f"official_catalog_{OFFICIAL_PARTS_VERSION}.json"
 _SUPPLEMENT = "official_part_supplements.json"
+_MOUNTING_SOURCE = "../parts/mountings.py"
 _IDENTITY_LDRAW = [0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]
 
 
@@ -41,18 +44,19 @@ def build_catalog(ldraw_root: Path) -> _CatalogData:
     parts = snapshot.parts
     model_ids = partdata.part_ids()
     _add_collision_metadata(parts)
-    supplemental_path = DATA_DIR / _SUPPLEMENT
-    supplements = (
-        json.loads(supplemental_path.read_text(encoding="utf-8"))["parts"]
-        if supplemental_path.is_file()
-        else {}
-    )
+    supplements = _supplements(ldraw_root)
     for part_id, row in parts.items():
         row["model"] = part_id in model_ids
         _add_sdk_metadata(part_id, row)
         if (popular := partdata.popularity(part_id)) > 0:
             row["popularity"] = popular
-        if supplement := supplements.get(part_id):
+        if supplement := supplements["parts"].get(part_id):
+            if (collider := supplement.get("collider")) and (
+                row.get("collider", [None, None])[1] != collider["frame_sha256"]
+            ):
+                raise ValueError(
+                    f"Supplemental collision frame checksum mismatch for {part_id}"
+                )
             row["supplemental"] = [_SUPPLEMENT, _digest(supplement)]
 
     return {
@@ -71,8 +75,18 @@ def build_catalog(ldraw_root: Path) -> _CatalogData:
             name: {status: len(ids) for status, ids in grouping.items()}
             for name, grouping in _capabilities(parts).items()
         },
-        "mountings": {},
+        "mountings": _mountings(parts),
     }
+
+
+def _supplements(ldraw_root: Path) -> dict:
+    supplements = json.loads((DATA_DIR / _SUPPLEMENT).read_text(encoding="utf-8"))
+    if supplements["ldraw_version"] != OFFICIAL_PARTS_VERSION:
+        raise ValueError(f"{_SUPPLEMENT} is for a different LDraw release")
+    for file, source in supplements["files"].items():
+        if sha256((ldraw_root / file).read_bytes()).hexdigest() != source["sha256"]:
+            raise ValueError(f"Supplemental source checksum mismatch for {file}")
+    return supplements
 
 
 def _add_collision_metadata(parts: dict[str, _PartRow]) -> None:
@@ -206,18 +220,40 @@ def _package_fingerprints() -> dict[str, str]:
         "part_connector_types.json",
         "part_popularity.json",
         "meshes/index.json",
+        _SUPPLEMENT,
+        _MOUNTING_SOURCE,
         *(file for file, _ in partdata._DATA_FILES),
         *(
             path.relative_to(DATA_DIR).as_posix()
             for path in (DATA_DIR / "meshes").glob("*.zip")
         ),
     }
-    if (DATA_DIR / _SUPPLEMENT).is_file():
-        files.add(_SUPPLEMENT)
     return {
         file: sha256((DATA_DIR / file).read_bytes()).hexdigest()
         for file in sorted(files)
     }
+
+
+def _mountings(parts: dict[str, _PartRow]) -> dict[str, object]:
+    result: dict[str, object] = {}
+    for row in verified_mountings():
+        key = "/".join((*row.part_ids, row.mounting))
+        if key in result or any(
+            part_id not in parts or not parts[part_id]["model"]
+            for part_id in row.part_ids
+        ):
+            raise ValueError(f"Duplicate or unavailable verified mounting {key}")
+        result[key] = {
+            "endpoint_indices": list(row.endpoint_indices),
+            "parameters": asdict(row.parameters),
+            "rotation": [list(vector) for vector in row.pose.rotation.entries],
+            "translation": list(map(float, row.pose.translation)),
+            "verification_scope": row.verification_scope,
+            "sources": list(row.sources),
+            "motion": asdict(row.motion) if row.motion is not None else None,
+            "samples_per_axis": row.samples_per_axis,
+        }
+    return result
 
 
 def _capabilities(parts: dict[str, _PartRow]) -> dict[str, dict[str, list[str]]]:

@@ -141,3 +141,40 @@ def test_connector_index_and_official_search_avoid_constructing_candidates(monke
         for part in bl.search_official_parts("brick", connector_type="stud")
     )
     assert bl.search_official_parts("elongated nose", constructible=True) == ()
+
+
+def test_supplemental_collision_and_connection_sources():
+    hinge = bl.lookup_part("53923")
+    assert hinge.constructible.available
+    mesh = hinge.collision.sources[0]
+    assert mesh.file == "meshes/Hinge.zip/53923.drc"
+    assert mesh.donor_id == "53923"
+    assert mesh.transform_ldraw == (0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1)
+    assert any(source.file == "parts/53923.dat" for source in mesh.citations)
+    assert {endpoint.raw.type for endpoint in hinge.endpoints} == {
+        "axle_hole",
+        "hinge_2_in",
+    }
+    assert all(
+        endpoint.source.citations and endpoint.source.note
+        for endpoint in hinge.endpoints
+    )
+
+
+def test_verified_mountings_expand_from_a_part_result():
+    arm = bl.lookup_part("2651")
+    assert arm.constructible.available
+    assert arm.connectivity.available
+    assert arm.verified_mountings == bl.verified_mountings("2651")
+    assert {mounting.mounting for mounting in arm.verified_mountings} == {
+        "retracted",
+        "extended",
+    }
+    assert all(
+        mounting.part_ids == ("2650", "2651") for mounting in arm.verified_mountings
+    )
+    assert [
+        mounting.mounting
+        for mounting in bl.lookup_part("2651c01-f2").verified_mountings
+    ] == ["extended"]
+    assert bl.lookup_part("no-such-part").verified_mountings == ()

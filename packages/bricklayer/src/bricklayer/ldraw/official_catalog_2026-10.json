@@ -14,6 +14,7 @@
       "tree_sha256": "332b133ffc9afb7584529b8425e9b7972f6599f8db469910845a83247b83cf74"
     },
     "packaged_files_sha256": {
+      "../parts/mountings.py": "229bbadf398905f15cb11ed2a75c8ce6ff98b27f2d2f031e9cf524b609e0999f",
       "meshes/Animal.zip": "690b219ecfb608c9fbd885f168a52e1c8e918829e5b102aa6c8b8a1bac4dbe5b",
       "meshes/Antenna.zip": "47a94aa9f6448013e32d9ba1b96a44e04a9d370519bf5985efbc97888b029125",
       "meshes/Arch.zip": "b21ba3a17b67c2a1971e05b87cdd2bf2484de96428e45af0c8e16e4d599e608d",
@@ -46,7 +47,7 @@
       "meshes/Garage.zip": "f711873ca224f2a367061f6e7543fb987b8c522762192d30574b969829bdfcf9",
       "meshes/Glass.zip": "505eb07cafd20824a4fef4f94a04c50defef69a2bd5ba660b5c28930545e997f",
       "meshes/Helper.zip": "9518645f83958abb158f676c269cc15f914bad9fe8671f5deb8ae1f446aa7a28",
-      "meshes/Hinge.zip": "56c4d66428864e7314099810adcf124c8e138abcf93a4e61f146e1100d596693",
+      "meshes/Hinge.zip": "446a8ff549bce44180c3e5ba8fb2abfb6015c55ac154e8d6f3db7e98d062cebf",
       "meshes/Homemaker.zip": "311664b8a8934dc49112f69aed47b35eebe4bdfd05797f12337f89f2dca825db",
       "meshes/Hose.zip": "31a8385195097282352ad962a0ffe1031a058b62dac190287c191fdc00f95b75",
       "meshes/Ladder.zip": "371d5f3569f4dc247726a89845426ba7ac8fef31f15d9f9fae2dceb6a000f28c",
@@ -106,33 +107,805 @@
       "meshes/Windscreen.zip": "dd9f4cbc3f56bb6d70e4f1804219e8e140d879b80d700a34696d10a63b719ebf",
       "meshes/Wing.zip": "286f9dbc23443fa1677e2ea1e3ff0f6fa559827529cb264f0e17c4f94852b69f",
       "meshes/Znap.zip": "cbc91af072d0e65df015a2f1a815bc86096523442f3478da62ed977538831ed7",
-      "meshes/index.json": "09c60a23c1145cc8fd1a204aaac1c6bbb9a6f7b45686cce4d3f8a19f688de7b5",
+      "meshes/index.json": "d08b438655eda1ace23989ac7c903d11e9ef515f44c2a47bb1af57be11968819",
+      "official_part_supplements.json": "5f7ffc334b0c5bb3628e8d9c08e6716539f642c7089eec2058cbb6ab96135eed",
       "part_connectivity.json": "b32af2c2e4ac9ce9210cb05698a04c309182be95cdbb4625ca767babc861b31f",
-      "part_connectivity_overrides.json": "73a397d36535fa6c336627fc245d8763da86a3fb72c94400c6c84ba2be340a0a",
-      "part_connector_types.json": "48e705f1f20c0d3510302ecf866dddf4842a367f11c096fee12e07a9024f776b",
-      "part_geometry.json": "b7ebe585c64a71cd38ddf8b58f1e4e257e3737a8bd55cb12f1f3c927b069131e",
+      "part_connectivity_overrides.json": "ce3b671d12457bd3ad0dff9b2df18e06bba65eb52a43d68fa320e80f5fd77978",
+      "part_connector_types.json": "bcb795a97c54690fe627c00500d7d6231f18c29d518646c0ba0d616f08cc7f05",
+      "part_geometry.json": "ad4c679c2bee51ecc7c8d7754d257a9b53c54ce49eddef2e093c95ee7972a446",
       "part_geometry_overrides.json": "6cbea33855ac2b3ec56a578ab821cc4e017b08da034e03b46974f0931d00982c",
       "part_offset_rotations.json": "f2b62d731b8d3e28c93237cfdc97f5799588f99c935e4c45dc05ba2832ec05e7",
       "part_popularity.json": "0bb8fd7da26760973f3b8dc56dff98adf7a80b4c38e4767859737de0ba97edd6",
-      "part_taxonomy.json": "9b7ace674614fbb2d8bfe92277499dcd5542b18e100fa6eeccd6eca1ba225fa7"
+      "part_taxonomy.json": "bb6e2a02cfaf1e6d09aa07b39041b40b975e2be38673520120d2a2ee46e5c10b"
     }
   },
-  "mountings": {},
+  "mountings": {
+    "11211/3024/front_side_stud": {
+      "endpoint_indices": [
+        5,
+        0
+      ],
+      "motion": null,
+      "parameters": {
+        "angle": 0.0,
+        "flip": false,
+        "offset": 0,
+        "swing_x": 0.0,
+        "swing_y": 0.0
+      },
+      "rotation": [
+        [
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          -1.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0
+        ]
+      ],
+      "samples_per_axis": null,
+      "sources": [
+        "parts/11211.dat",
+        "parts/3024.dat"
+      ],
+      "translation": [
+        -0.5,
+        -0.5,
+        0.5833333333333334
+      ],
+      "verification_scope": "Plate seated on the front-facing stud at local x=-0.5 studs. Verified facing, engagement and collider clearance."
+    },
+    "14418/22890/ball_centered": {
+      "endpoint_indices": [
+        8,
+        8
+      ],
+      "motion": {
+        "lower": {
+          "swing_x": -15,
+          "swing_y": -15,
+          "twist": -20
+        },
+        "upper": {
+          "swing_x": 15,
+          "swing_y": 15,
+          "twist": 20
+        }
+      },
+      "parameters": {
+        "angle": 180,
+        "flip": false,
+        "offset": 0,
+        "swing_x": 0.0,
+        "swing_y": 0.0
+      },
+      "rotation": [
+        [
+          -1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          -1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "samples_per_axis": 3,
+      "sources": [
+        "parts/14418.dat",
+        "parts/22890.dat"
+      ],
+      "translation": [
+        3.0,
+        0.0,
+        0.0
+      ],
+      "verification_scope": "Ball centered in the socket. All 27 samples at swing coordinates -15°, 0°, 15° on both axes and twist -20°, 0°, 20° cleared. Four of 27 samples collided with swing ±20° and twist ±30°."
+    },
+    "2650/2651/extended": {
+      "endpoint_indices": [
+        1,
+        0
+      ],
+      "motion": null,
+      "parameters": {
+        "angle": 0.0,
+        "flip": false,
+        "offset": -0.925,
+        "swing_x": 0.0,
+        "swing_y": 0.0
+      },
+      "rotation": [
+        [
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "samples_per_axis": null,
+      "sources": [
+        "parts/2650.dat",
+        "parts/2651.dat",
+        "parts/2651c01-f2.dat"
+      ],
+      "translation": [
+        -5.6499999999999995,
+        0.0,
+        0.0
+      ],
+      "verification_scope": "Official extended pose, axial engagement and collider clearance. Verified at this position only."
+    },
+    "2650/2651/retracted": {
+      "endpoint_indices": [
+        1,
+        0
+      ],
+      "motion": null,
+      "parameters": {
+        "angle": 0.0,
+        "flip": false,
+        "offset": 0.925,
+        "swing_x": 0.0,
+        "swing_y": 0.0
+      },
+      "rotation": [
+        [
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "samples_per_axis": null,
+      "sources": [
+        "parts/2650.dat",
+        "parts/2651.dat",
+        "parts/2651c01-f1.dat"
+      ],
+      "translation": [
+        -3.8,
+        0.0,
+        0.0
+      ],
+      "verification_scope": "Official retracted pose, axial engagement and collider clearance. Verified at this position only."
+    },
+    "30237/30031/side_bar_in_clip": {
+      "endpoint_indices": [
+        3,
+        0
+      ],
+      "motion": {
+        "lower": {
+          "angle": -30,
+          "offset": 0
+        },
+        "upper": {
+          "angle": 30,
+          "offset": 0
+        }
+      },
+      "parameters": {
+        "angle": 180,
+        "flip": false,
+        "offset": 0,
+        "swing_x": 0.0,
+        "swing_y": 0.0
+      },
+      "rotation": [
+        [
+          -0.3662095589776213,
+          -0.9305324061597297,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0
+        ],
+        [
+          -0.9305324061597297,
+          0.3662095589776213,
+          0.0
+        ]
+      ],
+      "samples_per_axis": 7,
+      "sources": [
+        "parts/30237.dat",
+        "parts/30031.dat"
+      ],
+      "translation": [
+        -0.10385916708281093,
+        -1.6999999999999997,
+        -0.2889262949498351
+      ],
+      "verification_scope": "First angled handlebar seated in the vertical clip. Seven collision-free twist samples from -30° to 30° about this pose at fixed insertion. Eleven of 25 samples collided over a full turn."
+    },
+    "30553/53923/detent_112.5_degrees": {
+      "endpoint_indices": [
+        1,
+        1
+      ],
+      "motion": null,
+      "parameters": {
+        "angle": 112.5,
+        "flip": false,
+        "offset": 0,
+        "swing_x": 0.0,
+        "swing_y": 0.0
+      },
+      "rotation": [
+        [
+          0.9999999999999999,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          -0.3826834323650897,
+          -0.9238795325112867
+        ],
+        [
+          0.0,
+          0.9238795325112867,
+          -0.3826834323650897
+        ]
+      ],
+      "samples_per_axis": null,
+      "sources": [
+        "parts/30553.dat",
+        "parts/53923.dat",
+        "p/clh5.dat",
+        "p/clh5s.dat",
+        "p/clh15.dat"
+      ],
+      "translation": [
+        0.0,
+        -0.6913417161825448,
+        0.3849498052130362
+      ],
+      "verification_scope": "Centered, indexed tooth position. Verified endpoint engagement and collider clearance at this angle. Rotation between detents and snap-in assembly are outside the verification scope."
+    },
+    "30553/53923/detent_135_degrees": {
+      "endpoint_indices": [
+        1,
+        1
+      ],
+      "motion": null,
+      "parameters": {
+        "angle": 135,
+        "flip": false,
+        "offset": 0,
+        "swing_x": 0.0,
+        "swing_y": 0.0
+      },
+      "rotation": [
+        [
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          -0.7071067811865475,
+          -0.7071067811865476
+        ],
+        [
+          0.0,
+          0.7071067811865476,
+          -0.7071067811865475
+        ]
+      ],
+      "samples_per_axis": null,
+      "sources": [
+        "parts/30553.dat",
+        "parts/53923.dat",
+        "p/clh5.dat",
+        "p/clh5s.dat",
+        "p/clh15.dat"
+      ],
+      "translation": [
+        0.0,
+        -0.8535533905932737,
+        0.2946278254943948
+      ],
+      "verification_scope": "Centered, indexed tooth position. Verified endpoint engagement and collider clearance at this angle. Rotation between detents and snap-in assembly are outside the verification scope."
+    },
+    "30553/53923/detent_157.5_degrees": {
+      "endpoint_indices": [
+        1,
+        1
+      ],
+      "motion": null,
+      "parameters": {
+        "angle": 157.5,
+        "flip": false,
+        "offset": 0,
+        "swing_x": 0.0,
+        "swing_y": 0.0
+      },
+      "rotation": [
+        [
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          -0.9238795325112867,
+          -0.3826834323650899
+        ],
+        [
+          0.0,
+          0.3826834323650899,
+          -0.9238795325112867
+        ]
+      ],
+      "samples_per_axis": null,
+      "sources": [
+        "parts/30553.dat",
+        "parts/53923.dat",
+        "p/clh5.dat",
+        "p/clh5s.dat",
+        "p/clh15.dat"
+      ],
+      "translation": [
+        0.0,
+        -0.9619397662556434,
+        0.1594514301521208
+      ],
+      "verification_scope": "Centered, indexed tooth position. Verified endpoint engagement and collider clearance at this angle. Rotation between detents and snap-in assembly are outside the verification scope."
+    },
+    "30553/53923/detent_180_degrees": {
+      "endpoint_indices": [
+        1,
+        1
+      ],
+      "motion": null,
+      "parameters": {
+        "angle": 180,
+        "flip": false,
+        "offset": 0,
+        "swing_x": 0.0,
+        "swing_y": 0.0
+      },
+      "rotation": [
+        [
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          -1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          -1.0
+        ]
+      ],
+      "samples_per_axis": null,
+      "sources": [
+        "parts/30553.dat",
+        "parts/53923.dat",
+        "p/clh5.dat",
+        "p/clh5s.dat",
+        "p/clh15.dat"
+      ],
+      "translation": [
+        0.0,
+        -1.0,
+        -0.0
+      ],
+      "verification_scope": "Centered, indexed tooth position. Verified endpoint engagement and collider clearance at this angle. Rotation between detents and snap-in assembly are outside the verification scope."
+    },
+    "30553/53923/detent_202.5_degrees": {
+      "endpoint_indices": [
+        1,
+        1
+      ],
+      "motion": null,
+      "parameters": {
+        "angle": 202.5,
+        "flip": false,
+        "offset": 0,
+        "swing_x": 0.0,
+        "swing_y": 0.0
+      },
+      "rotation": [
+        [
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          -0.9238795325112868,
+          0.38268343236508967
+        ],
+        [
+          0.0,
+          -0.38268343236508967,
+          -0.9238795325112868
+        ]
+      ],
+      "samples_per_axis": null,
+      "sources": [
+        "parts/30553.dat",
+        "parts/53923.dat",
+        "p/clh5.dat",
+        "p/clh5s.dat",
+        "p/clh15.dat"
+      ],
+      "translation": [
+        0.0,
+        -0.9619397662556435,
+        -0.1594514301521207
+      ],
+      "verification_scope": "Centered, indexed tooth position. Verified endpoint engagement and collider clearance at this angle. Rotation between detents and snap-in assembly are outside the verification scope."
+    },
+    "30553/53923/detent_225_degrees": {
+      "endpoint_indices": [
+        1,
+        1
+      ],
+      "motion": null,
+      "parameters": {
+        "angle": 225,
+        "flip": false,
+        "offset": 0,
+        "swing_x": 0.0,
+        "swing_y": 0.0
+      },
+      "rotation": [
+        [
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          -0.7071067811865477,
+          0.7071067811865475
+        ],
+        [
+          0.0,
+          -0.7071067811865475,
+          -0.7071067811865477
+        ]
+      ],
+      "samples_per_axis": null,
+      "sources": [
+        "parts/30553.dat",
+        "parts/53923.dat",
+        "p/clh5.dat",
+        "p/clh5s.dat",
+        "p/clh15.dat"
+      ],
+      "translation": [
+        0.0,
+        -0.8535533905932738,
+        -0.2946278254943948
+      ],
+      "verification_scope": "Centered, indexed tooth position. Verified endpoint engagement and collider clearance at this angle. Rotation between detents and snap-in assembly are outside the verification scope."
+    },
+    "30553/53923/detent_247.5_degrees": {
+      "endpoint_indices": [
+        1,
+        1
+      ],
+      "motion": null,
+      "parameters": {
+        "angle": 247.5,
+        "flip": false,
+        "offset": 0,
+        "swing_x": 0.0,
+        "swing_y": 0.0
+      },
+      "rotation": [
+        [
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          -0.3826834323650895,
+          0.9238795325112868
+        ],
+        [
+          0.0,
+          -0.9238795325112868,
+          -0.3826834323650895
+        ]
+      ],
+      "samples_per_axis": null,
+      "sources": [
+        "parts/30553.dat",
+        "parts/53923.dat",
+        "p/clh5.dat",
+        "p/clh5s.dat",
+        "p/clh15.dat"
+      ],
+      "translation": [
+        0.0,
+        -0.6913417161825448,
+        -0.3849498052130362
+      ],
+      "verification_scope": "Centered, indexed tooth position. Verified endpoint engagement and collider clearance at this angle. Rotation between detents and snap-in assembly are outside the verification scope."
+    },
+    "30553/53923/detent_270_degrees": {
+      "endpoint_indices": [
+        1,
+        1
+      ],
+      "motion": null,
+      "parameters": {
+        "angle": 270,
+        "flip": false,
+        "offset": 0,
+        "swing_x": 0.0,
+        "swing_y": 0.0
+      },
+      "rotation": [
+        [
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0
+        ],
+        [
+          0.0,
+          -1.0,
+          0.0
+        ]
+      ],
+      "samples_per_axis": null,
+      "sources": [
+        "parts/30553.dat",
+        "parts/53923.dat",
+        "p/clh5.dat",
+        "p/clh5s.dat",
+        "p/clh15.dat"
+      ],
+      "translation": [
+        0.0,
+        -0.5,
+        -0.4166666666666667
+      ],
+      "verification_scope": "Centered, indexed tooth position. Verified endpoint engagement and collider clearance at this angle. Rotation between detents and snap-in assembly are outside the verification scope."
+    },
+    "30553/53923/detent_90_degrees": {
+      "endpoint_indices": [
+        1,
+        1
+      ],
+      "motion": null,
+      "parameters": {
+        "angle": 90,
+        "flip": false,
+        "offset": 0,
+        "swing_x": 0.0,
+        "swing_y": 0.0
+      },
+      "rotation": [
+        [
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          -1.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0
+        ]
+      ],
+      "samples_per_axis": null,
+      "sources": [
+        "parts/30553.dat",
+        "parts/53923.dat",
+        "p/clh5.dat",
+        "p/clh5s.dat",
+        "p/clh15.dat"
+      ],
+      "translation": [
+        0.0,
+        -0.5,
+        0.4166666666666667
+      ],
+      "verification_scope": "Centered, indexed tooth position. Verified endpoint engagement and collider clearance at this angle. Rotation between detents and snap-in assembly are outside the verification scope."
+    },
+    "3700/2780/one_pin_end_seated": {
+      "endpoint_indices": [
+        8,
+        0
+      ],
+      "motion": null,
+      "parameters": {
+        "angle": 0.0,
+        "flip": false,
+        "offset": 0,
+        "swing_x": 0.0,
+        "swing_y": 0.0
+      },
+      "rotation": [
+        [
+          0.0,
+          0.0,
+          -1.0
+        ],
+        [
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          -1.0,
+          0.0
+        ]
+      ],
+      "samples_per_axis": null,
+      "sources": [
+        "parts/3700.dat",
+        "parts/2780.dat"
+      ],
+      "translation": [
+        0.0,
+        0.55,
+        0.5833333333333334
+      ],
+      "verification_scope": "One end centered in the round hole. Verified axial engagement and collider clearance at the seated depth."
+    },
+    "4275b/4276b/flat": {
+      "endpoint_indices": [
+        5,
+        5
+      ],
+      "motion": {
+        "lower": {
+          "angle": -90
+        },
+        "upper": {
+          "angle": 0
+        }
+      },
+      "parameters": {
+        "angle": 180,
+        "flip": false,
+        "offset": 0,
+        "swing_x": 0.0,
+        "swing_y": 0.0
+      },
+      "rotation": [
+        [
+          -1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          -1.0
+        ]
+      ],
+      "samples_per_axis": 7,
+      "sources": [
+        "parts/4275b.dat",
+        "parts/4276b.dat"
+      ],
+      "translation": [
+        3.0,
+        0.0,
+        0.3333333333333333
+      ],
+      "verification_scope": "Coincident finger axes. Seven collision-free samples from flat to a 90° fold (0° to -90° relative to flat)."
+    },
+    "7229/3705/cross_axle_centered": {
+      "endpoint_indices": [
+        4,
+        0
+      ],
+      "motion": null,
+      "parameters": {
+        "angle": 0.0,
+        "flip": false,
+        "offset": 0,
+        "swing_x": 0.0,
+        "swing_y": 0.0
+      },
+      "rotation": [
+        [
+          0.0,
+          0.0,
+          -1.0
+        ],
+        [
+          0.0,
+          -1.0,
+          0.0
+        ],
+        [
+          -1.0,
+          0.0,
+          0.0
+        ]
+      ],
+      "samples_per_axis": null,
+      "sources": [
+        "parts/7229.dat",
+        "parts/3705.dat"
+      ],
+      "translation": [
+        0.0,
+        0.0,
+        0.41666666666666663
+      ],
+      "verification_scope": "Both cross sections aligned. Verified axial engagement and collider clearance at the centered position."
+    }
+  },
   "schema": 1,
   "status_counts": {
     "collision": {
-      "available": 21676,
-      "missing": 3309
+      "available": 21677,
+      "missing": 3308
     },
     "connectivity": {
-      "missing": 4309,
+      "missing": 4308,
       "not_applicable": 2899,
-      "partial": 17320,
-      "unverified": 457
+      "partial": 17322,
+      "unverified": 456
     },
     "constructible": {
-      "available": 21676,
-      "missing": 3309
+      "available": 21677,
+      "missing": 3308
     },
     "geometry": {
       "available": 24979,
@@ -4671,8 +5444,8 @@
     "26490p04": {"author":"Philippe Hurbain [Philo]","bounds":["part_geometry.json","d9957753bbea8f70b6fa3e414c219d4e5f3721d63223a5e5002063c296c47a23"],"category":"Figure","collider":["meshes/Figure.zip/26490p04.drc","dbe792de3fb08b12c2959a63112422eaaa7ca91742670e40e71e7df2a45147bc"],"components":["25727p04","92248"],"kind":"assembly","ldraw_type":"Shortcut UPDATE 2025-07","license":"Licensed under CC BY 4.0 : see CAreadme.txt","model":true,"name":"Figure Friends Hips and Legs with Cargo Pants with Nougat Legs and White Laces Blue Sneakers Pattern","sha256":"ca9d811c4fd68f3c7a2bce35038ee42a2c5b5e24af531b3b5230fa4f038286e7","visual":"available"},
     "26490p05": {"author":"Philippe Hurbain [Philo]","bounds":["part_geometry.json","d9957753bbea8f70b6fa3e414c219d4e5f3721d63223a5e5002063c296c47a23"],"category":"Figure","collider":["meshes/Figure.zip/26490p05.drc","2ff97c2b3f3d9989e648c561a661637fe53f3671500535ea6efbbd72d05df543"],"components":["25727p05","92248"],"kind":"assembly","ldraw_type":"Shortcut UPDATE 2025-07","license":"Licensed under CC BY 4.0 : see CAreadme.txt","model":true,"name":"Figure Friends Hips and Legs with Cargo Pants with Light Nougat Legs and Dark Blue V-Shaped Straps Sandals Pattern","sha256":"28ce8c16fd2b393535a8b08ff50413d60de8c5dfeefea202283f9d75058857dd","visual":"available"},
     "265": {"author":"[PTadmin]","bounds":["part_geometry.json","85c209f8c0fe1cbe3d7a24f4ff24e11fa27fdaec5fd6513f0cf44d01740fbc73"],"canonical_id":"265a","category":"Moved","collider":["meshes/Electric.zip/265.drc","d038404bd19a210de3a50db655551466795b18733b0537365890cf1da463c804"],"kind":"redirect","ldraw_type":"Part UPDATE 2010-02","license":"Licensed under CC BY 4.0 : see CAreadme.txt","model":true,"name":"Moved to 265a","reference_id":"265a","reference_ldraw":[0.0,0.0,0.0,1.0,0.0,0.0,0.0,1.0,0.0,0.0,0.0,1.0],"sha256":"cab34caa8ad507e3ca6ad28d9c84aea0a0c41a2aca13e7c5dc4c20b4834b58ab","visual":"available"},
-    "2650": {"author":"Bernd Broich [bbroich]","bounds":["part_geometry.json","a5bb7bce2c665f0207bdd8804532cff7d9fa39888fcaa0c3bb73d4da9d5fb566"],"category":"Hinge","collider":["meshes/Hinge.zip/2650.drc","2b65c30343844b749e83f985431955c87d8a67fb2ffbb270880137da04ca0941"],"connector_sources":[{"count":1,"file":"part_connectivity.json","sha256":"94839a7d7098c8ab0ef0babbe280c3acbe0ba7fe50e94d3da806ca55f1b3af3f"}],"connector_types":["hinge_7_on"],"kind":"part","ldraw_type":"Part UPDATE 2018-01","license":"Licensed under CC BY 4.0 : see CAreadme.txt","model":true,"name":"Hinge Hook Base","popularity":4,"sha256":"35bca1dd330c29089cbe72bca9ae5d85d9b699f0e8877a5025189351e7fbdba8","visual":"available"},
-    "2651": {"author":"Bernd Broich [bbroich]","bounds":["part_geometry.json","1ade72f2b64b96fa022248503bc898194b4558bce0c0961434dcda21eeba4149"],"category":"Hinge","collider":["meshes/Hinge.zip/2651.drc","4286e6287b6f34351ee2bff703c44852450370b973b006e1eac14643004ee3ec"],"kind":"part","ldraw_type":"Part UPDATE 2025-09","license":"Licensed under CC BY 4.0 : see CAreadme.txt","model":true,"name":"Hinge Hook Arm","sha256":"c17a0c9c569b911ad4984014ccbe2ffcd29f97af9a454d1676a9a481fea581bb","visual":"available"},
+    "2650": {"author":"Bernd Broich [bbroich]","bounds":["part_geometry.json","a5bb7bce2c665f0207bdd8804532cff7d9fa39888fcaa0c3bb73d4da9d5fb566"],"category":"Hinge","collider":["meshes/Hinge.zip/2650.drc","2b65c30343844b749e83f985431955c87d8a67fb2ffbb270880137da04ca0941"],"connector_sources":[{"count":1,"file":"part_connectivity.json","sha256":"94839a7d7098c8ab0ef0babbe280c3acbe0ba7fe50e94d3da806ca55f1b3af3f"},{"count":1,"file":"part_connectivity_overrides.json","note":"Authored addition to the effective connector annotations.","sha256":"474d91b86d38574b09d90adebc000eb9411b3b0eb1474ad20ee7c3eb077fecbf"}],"connector_types":["hinge_7_on","hook_slide_channel"],"kind":"part","ldraw_type":"Part UPDATE 2018-01","license":"Licensed under CC BY 4.0 : see CAreadme.txt","model":true,"name":"Hinge Hook Base","popularity":4,"sha256":"35bca1dd330c29089cbe72bca9ae5d85d9b699f0e8877a5025189351e7fbdba8","supplemental":["official_part_supplements.json","0afa78bd2c53871a0f486efcc6724589c6cca8ffa1e812477d951a86d630cd83"],"visual":"available"},
+    "2651": {"author":"Bernd Broich [bbroich]","bounds":["part_geometry.json","1ade72f2b64b96fa022248503bc898194b4558bce0c0961434dcda21eeba4149"],"category":"Hinge","collider":["meshes/Hinge.zip/2651.drc","4286e6287b6f34351ee2bff703c44852450370b973b006e1eac14643004ee3ec"],"connector_sources":[{"count":1,"file":"part_connectivity_overrides.json","note":"Authored addition to the effective connector annotations.","sha256":"d1574d4eacff006940561c9a350032190053eeb69cf04dd5e58b823e2de27864"}],"connector_types":["hook_slide_arm"],"kind":"part","ldraw_type":"Part UPDATE 2025-09","license":"Licensed under CC BY 4.0 : see CAreadme.txt","model":true,"name":"Hinge Hook Arm","sha256":"c17a0c9c569b911ad4984014ccbe2ffcd29f97af9a454d1676a9a481fea581bb","supplemental":["official_part_supplements.json","5df4d3c40a74c00e343787f3229281be840f6b8af46b46bc38f663bcbeab6ef2"],"visual":"available"},
     "2651c01": {"author":"[PTadmin]","bounds":["part_geometry.json","67e814887d8320ece4c5399ee13afda8a6a8e9f7307eb15807d5588dcda8389e"],"canonical_id":"2651c01-f1","category":"Moved","collider":["meshes/Hinge.zip/2651c01.drc","c7dff51c8329de9faefb29d7db737f0a1b0e044446e35ae97b97a02d6eceb812"],"connector_sources":[{"count":1,"donor_id":"2651c01-f1","file":"part_connectivity.json","sha256":"e5c023d5fc945a0ddd913943daac1a9e3b3048480497a66839fe8b4541723388","transform_ldraw":[0.0,0.0,0.0,1.0,0.0,0.0,0.0,1.0,0.0,0.0,0.0,1.0]}],"connector_types":["hinge_7_on"],"kind":"redirect","ldraw_type":"Part UPDATE 2018-02","license":"Licensed under CC BY 4.0 : see CAreadme.txt","model":true,"name":"Moved to 2651c01-f1","reference_id":"2651c01-f1","reference_ldraw":[0.0,0.0,0.0,1.0,0.0,0.0,0.0,1.0,0.0,0.0,0.0,1.0],"sha256":"7337b46822b25249fbcf02022351eb06e44dd21dd83a4335bff9ee823788e412","visual":"available"},
     "2651c01-f1": {"author":"Bernd Broich [bbroich]","bounds":["part_geometry.json","67e814887d8320ece4c5399ee13afda8a6a8e9f7307eb15807d5588dcda8389e"],"category":"Hinge","collider":["meshes/Hinge.zip/2651c01-f1.drc","c7dff51c8329de9faefb29d7db737f0a1b0e044446e35ae97b97a02d6eceb812"],"components":["2650","2651"],"connector_sources":[{"count":1,"file":"part_connectivity.json","sha256":"94839a7d7098c8ab0ef0babbe280c3acbe0ba7fe50e94d3da806ca55f1b3af3f"}],"connector_types":["hinge_7_on"],"kind":"assembly","ldraw_type":"Part UPDATE 2018-02","license":"Licensed under CC BY 4.0 : see CAreadme.txt","model":true,"name":"Hinge Hook Retracted (Shortcut)","popularity":4,"sha256":"66b014825ce5efed43da23502a0e4548dc46a9726749138a2ffbfd8951b14438","visual":"available"},
     "2651c01-f2": {"author":"Bernd Broich [bbroich]","bounds":["part_geometry.json","03250eba5ad3da2220cb4d8c748928a770d95ef7d96d60d72b47d6e051ffa3d2"],"category":"Hinge","collider":["meshes/Hinge.zip/2651c01-f2.drc","892d680c62202758c6682a528d37acc15cf682cb53fc795f9e4153a38ee56cab"],"components":["2650","2651"],"connector_sources":[{"count":1,"file":"part_connectivity.json","sha256":"94839a7d7098c8ab0ef0babbe280c3acbe0ba7fe50e94d3da806ca55f1b3af3f"}],"connector_types":["hinge_7_on"],"kind":"assembly","ldraw_type":"Part UPDATE 2018-02","license":"Licensed under CC BY 4.0 : see CAreadme.txt","model":true,"name":"Hinge Hook Extended (Shortcut)","popularity":4,"sha256":"638c0203f1b39a7cf7aa039aee31f0d65b29d8b7718aac9bcb3c70efa55e023a","visual":"available"},
@@ -14622,7 +15395,7 @@
     "53912p30": {"author":"Magnus Forsberg [MagFors]","base":"53912","bounds":["part_geometry.json","3a9808e4d549e537935b9d0e6120846315a109f26cb3bc1b21a38417e5eb5b39"],"category":"Flag","collider":["meshes/Flag.zip/53912p30.drc","ec7056fc5685d1887540670797c1c4f640984ab5a3c5c15bcef30fe9b861316f"],"connector_sources":[{"count":2,"file":"part_connectivity.json","sha256":"afc93b061952432533e675d1a2050299a88a1b82aa9a4600ef773e9a02908281"}],"connector_types":["clip"],"kind":"pattern","ldraw_type":"Part UPDATE 2022-03","license":"Licensed under CC BY 4.0 : see CAreadme.txt","model":true,"name":"Flag  6 x  4 with Thick C-Clips with Jolly Roger Squared Skull and Crossbones Pattern","popularity":9,"sha256":"4fcd90c0f9187ecb02fe8d768862fac5928d9ca18f389da00e90d5de664ae879","visual":"available"},
     "53914": {"author":"Gerald Lasser [GeraldLasser]","bounds":["part_geometry.json","69c0c561c90caa25ce03559ee5c5cf21874010fde70b90a456c53efd16656c9a"],"category":"Hinge","collider":["meshes/Hinge.zip/53914.drc","8be9e78352441a4b41f2bb15e819181167c0f056a5404f4fc5fb249a72a1ea76"],"connector_sources":[{"count":24,"file":"part_connectivity.json","sha256":"6961c4491b6d319ea3de3c106c9575afe1fcb5162ca9cae476e63c47ec24488f"}],"connector_types":["antistud","bar","hinge_2_in","hinge_2_on","post","stud"],"kind":"part","ldraw_type":"Part UPDATE 2022-05","license":"Licensed under CC BY 4.0 : see CAreadme.txt","model":true,"name":"Hinge Brick 1 x 6 Locking Double, Two Finger End with 7 Teeth","popularity":6,"sha256":"5f75cc40e5b6b56146f1bef1847b33cf01da2e06a8aeaeb4a501438734954dbf","visual":"available"},
     "53916": {"author":"Peter Blomberg [WUIt]","bounds":["part_geometry.json","75313c4981f6b7b95da7adcaa0fe9c53395122c67db6861a38ae97806d65951e"],"category":"Duplo","collider":["meshes/Duplo.zip/53916.drc","e10e7869e1c4176a7683a2c32e77d57489df9d9ad4bab53172f3d4f625eecfd5"],"kind":"part","ldraw_type":"Part UPDATE 2025-09","license":"Licensed under CC BY 4.0 : see CAreadme.txt","model":true,"name":"Duplo Building Wall  1 x  8 x  6 Hinge on Left with Window Opening","sha256":"89666f2cd76b23ce7f7b7fd8a67cf5eed664fa45f89046aae3ae30dc062b0620","visual":"available"},
-    "53923": {"author":"Max Martin Richter [MMR1988]","category":"Hinge","kind":"part","ldraw_type":"Part UPDATE 2026-08","license":"Licensed under CC BY 4.0 : see CAreadme.txt","model":false,"name":"Hinge Arm Locking with Single Finger and Axlehole without Slots","sha256":"78999c0bf9bc218f382ac922468aaf299a45e88dfbb763525038c994f59315af","visual":"available"},
+    "53923": {"author":"Max Martin Richter [MMR1988]","bounds":["part_geometry.json","53c88542c29c8e450bdf79307cbcf27f102d367377ff889d0ca920ff51c1a194"],"category":"Hinge","collider":["meshes/Hinge.zip/53923.drc","94325b4d5693b53974787be9bda38fb5388b183c483ee3b9c152a9e593ebf5a4"],"connector_sources":[{"count":2,"file":"part_connectivity_overrides.json","note":"Authored addition to the effective connector annotations.","sha256":"75fa6895fd42c63cf2811be133e48869ae8526bf9d2b154ced663c4e6a2b4630"}],"connector_types":["axle_hole","hinge_2_in"],"kind":"part","ldraw_type":"Part UPDATE 2026-08","license":"Licensed under CC BY 4.0 : see CAreadme.txt","model":true,"name":"Hinge Arm Locking with Single Finger and Axlehole without Slots","sha256":"78999c0bf9bc218f382ac922468aaf299a45e88dfbb763525038c994f59315af","supplemental":["official_part_supplements.json","9dcf844aa94f9403d5e0ae9a7357897977c9eba86b4db77d2c34dbca678b1791"],"visual":"available"},
     "53933": {"author":"[PTadmin]","bounds":["part_geometry.json","4862747c0bf0a62213d86f4fc56373882d5a69524bad425d9adfdd896b79f590"],"canonical_id":"53933p01","category":"Moved","collider":["meshes/Rock.zip/53933.drc","dc52404b091760a079b58706e3a83f9bb759b8377d663c839527081979affde8"],"connector_sources":[{"count":5,"donor_id":"53933p01","file":"part_connectivity.json","sha256":"e79189c9c3bfdd2783d9c55ba46dd7197bce95c93b46ac992086604f8349da57","transform_ldraw":[0.0,0.0,0.0,1.0,0.0,0.0,0.0,1.0,0.0,0.0,0.0,1.0]}],"connector_types":["stud","tube"],"kind":"redirect","ldraw_type":"Part UPDATE 2020-02","license":"Licensed under CC BY 4.0 : see CAreadme.txt","model":true,"name":"Moved to 53933p01","reference_id":"53933p01","reference_ldraw":[0.0,0.0,0.0,1.0,0.0,0.0,0.0,1.0,0.0,0.0,0.0,1.0],"sha256":"3a9fbc884fb5e9c0ed8ab6fc20658137a134eb0cab796fbe0a51dc47bf6081f6","visual":"available"},
     "53933p01": {"author":"Steffen [Steffen]","bounds":["part_geometry.json","4862747c0bf0a62213d86f4fc56373882d5a69524bad425d9adfdd896b79f590"],"category":"Rock","collider":["meshes/Rock.zip/53933p01.drc","dc52404b091760a079b58706e3a83f9bb759b8377d663c839527081979affde8"],"connector_sources":[{"count":5,"file":"part_connectivity.json","sha256":"8c75b06caabb6c11a2ad44e051ba8038b300995213a6414380b7cf7199e2429e"}],"connector_types":["stud","tube"],"kind":"part","ldraw_type":"Part UPDATE 2020-02","license":"Licensed under CC BY 4.0 : see CAreadme.txt","model":true,"name":"Rock  4 x  4 x  1.333 Top Dual Mould with Dark Bluish Grey Upper Section","sha256":"32d72fe8ecd27508e563c5bb8981f1bb2e7b4b3a661439bfcae96121bca09782","visual":"available"},
     "53934": {"author":"Chris Dee [cwdee]","bounds":["part_geometry.json","00b00447e7717a02092cbd63ed08436c290578221d72cbf7e1b250740eae757e"],"category":"Rock","collider":["meshes/Rock.zip/53934.drc","3738fe9fe85d32362d37f03e625dc5ba8b7a388127f48ba42c9381b6cfdeb26f"],"connector_sources":[{"count":7,"donor_id":"53934p01","file":"part_connectivity.json","sha256":"6f1b100b62962666bad39a7290053ae8c28c5c018e7506f8b69a1728d6f9a95d","transform_ldraw":[0.0,0.0,0.0,1.0,0.0,0.0,0.0,1.0,0.0,0.0,0.0,1.0]}],"connector_types":["antistud","clip","open_stud","tube"],"kind":"part","ldraw_type":"Part UPDATE 2020-03","license":"Licensed under CC BY 4.0 : see CAreadme.txt","model":true,"name":"Rock  4 x  4 x  1.667 Bottom Dual Mould","sha256":"9e326fb24fcd9c4f354a4484a08702034ab4f474a24f2f48342362dcf8b2582b","visual":"available"},
