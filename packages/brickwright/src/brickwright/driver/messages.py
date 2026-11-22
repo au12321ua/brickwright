@@ -6,10 +6,13 @@ import mimetypes
 from pathlib import Path
 from typing import Any
 
+from bricklayer.diagnostics import DiagnosticError
+
 from ..config import Config, Effort
 from ..prompts import system_prompt
 from ..record import Record
 from ..tools import ToolOutcome
+from ..tools.tool_arguments import argument_object
 
 
 def request_kwargs(config: Config, agent: str | None = None) -> dict[str, Any]:
@@ -124,12 +127,24 @@ def tool_call_message(tc: Any, outcome: ToolOutcome | str) -> dict[str, Any]:
 
 
 def tool_call_arguments(tc: Any) -> dict[str, Any]:
-    """One tool call's arguments; an empty dict unless the model sent a JSON object."""
+    """Read provider arguments and reject malformed JSON before dispatch."""
+    raw = tc.function.arguments
     try:
-        arguments = json.loads(tc.function.arguments or "{}")
-    except json.JSONDecodeError:
-        return {}
-    return arguments if isinstance(arguments, dict) else {}
+        arguments = json.loads("{}" if raw is None else raw)
+    except json.JSONDecodeError as exc:
+        raise DiagnosticError(
+            exc.msg,
+            code="tool.invalid_json",
+            evidence={"line": exc.lineno, "column": exc.colno},
+            next_action="Send a complete JSON object for the tool arguments.",
+        ) from exc
+    except (TypeError, UnicodeDecodeError) as exc:
+        raise DiagnosticError(
+            str(exc),
+            code="tool.invalid_json",
+            next_action="Send a complete JSON object for the tool arguments.",
+        ) from exc
+    return argument_object(arguments)
 
 
 def truncation_retry_message() -> dict[str, Any]:

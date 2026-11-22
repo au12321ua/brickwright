@@ -13,13 +13,16 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict
+from bricklayer.diagnostics import DiagnosticError
+from pydantic import BaseModel, ConfigDict, ValidationError
 
 from ..config import Config
 from ..record import Record
-from ..tools import render_angle
+from ..tools import ToolOutcome, render_angle
+from ..tools.registry import tool_call_failure, unknown_tool
 from ..tools.schemas import CameraAngle, ToolArgs, function_tool
 from ..tools.software_rendering import MAX_ELEVATION
+from ..tools.tool_arguments import argument_diagnostics
 from .completion import litellm_complete
 from .messages import (
     assistant_message,
@@ -169,18 +172,26 @@ def match_viewpoint(
                 if done:
                     convo.append(tool_call_message(tc, "skipped: already finalized"))
                     continue
+                if name not in {"finalize", "render_view"}:
+                    convo.append(tool_call_message(tc, unknown_tool(name)))
+                    continue
+                try:
+                    arguments = tool_call_arguments(tc)
+                except DiagnosticError as exc:
+                    convo.append(tool_call_message(tc, tool_call_failure(name, exc)))
+                    continue
                 if name == "finalize":
                     done = True
                     convo.append(tool_call_message(tc, "ok: finalized"))
                     continue
-                if name != "render_view":
-                    convo.append(tool_call_message(tc, f"unknown tool {name!r}"))
-                    continue
 
                 try:
-                    angle = CameraAngle.model_validate(tool_call_arguments(tc))
-                except ValueError as exc:
-                    convo.append(tool_call_message(tc, f"invalid arguments: {exc}"))
+                    angle = CameraAngle.model_validate(arguments)
+                except ValidationError as exc:
+                    outcome = ToolOutcome.failure(
+                        "invalid arguments", argument_diagnostics(name, exc)
+                    )
+                    convo.append(tool_call_message(tc, outcome))
                     continue
                 azimuth, elevation = angle.azimuth, angle.elevation
                 attempts += 1
@@ -193,7 +204,12 @@ def match_viewpoint(
                 )
                 if not report.ok:
                     convo.append(
-                        tool_call_message(tc, f"render failed:\n{report.error}")
+                        tool_call_message(
+                            tc,
+                            ToolOutcome.failure(
+                                f"render failed:\n{report.error}", report.diagnostics
+                            ),
+                        )
                     )
                     continue
                 last_render = (azimuth, elevation, candidate)

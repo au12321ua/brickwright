@@ -421,30 +421,37 @@ class TestLoop:
         assert result.turns == 1
         assert result.final_text == "all good"
 
-    def test_malformed_tool_arguments_fall_back_to_empty(
-        self, record, config, patch_complete, response
+    @pytest.mark.parametrize(
+        "raw,code",
+        [
+            ("{not valid json", "tool.invalid_json"),
+            ("[1, 2]", "tool.arguments_not_object"),
+            ("5", "tool.arguments_not_object"),
+            ('"x"', "tool.arguments_not_object"),
+            ("null", "tool.arguments_not_object"),
+        ],
+    )
+    def test_rejects_a_bad_tool_argument_envelope_before_dispatch(
+        self, record, config, patch_complete, response, raw, code
     ):
         bad_call = SimpleNamespace(
             id="1",
             type="function",
-            function=SimpleNamespace(name="finalize", arguments="{not valid json"),
-        )
-        patch_complete(_FakeLLM(response(tool_calls=[bad_call])))
-        result = run_agent(record, config)
-        assert result.done is True  # finalize ran with {} despite the bad JSON
-        assert result.turns == 1
-
-    @pytest.mark.parametrize("raw", ["[1, 2]", "5", '"x"', "null"])
-    def test_non_object_tool_arguments_fall_back_to_empty(
-        self, record, config, patch_complete, response, raw
-    ):
-        call = SimpleNamespace(
-            id="1",
-            type="function",
             function=SimpleNamespace(name="finalize", arguments=raw),
         )
-        patch_complete(_FakeLLM(response(tool_calls=[call])))
-        assert run_agent(record, config).done is True
+        llm = patch_complete(
+            _FakeLLM(response(tool_calls=[bad_call]), response(content="done"))
+        )
+        result = run_agent(record, config)
+
+        assert not result.done
+        assert not record.snapshots
+        assert not record.ldr_path.exists()
+        outcome = llm.calls[1]["messages"][-1]
+        (issue,) = json.loads(outcome["content"])["diagnostics"]
+        assert issue["code"] == code
+        assert issue["stage"] == "tool_call"
+        assert issue["evidence"]["tool"] == "finalize"
 
     def test_validations_batched_in_one_turn_respect_the_budget(
         self,

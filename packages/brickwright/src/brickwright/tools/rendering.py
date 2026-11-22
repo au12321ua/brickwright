@@ -2,18 +2,26 @@
 
 from __future__ import annotations
 
+import io
 import json
-import traceback
 from collections.abc import Callable
+from contextlib import redirect_stdout
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
-from pydantic import BaseModel, ConfigDict
+from pydantic import JsonValue
 
 from ..config import Config
 from ..record import Record
 from . import build_execution
+from .diagnostics import (
+    Diagnostic,
+    DiagnosticReport,
+    captured_traceback,
+    exception_diagnostic,
+    source_read_diagnostic,
+)
 
 # Camera semantics come from the CPU renderer, so the two pipelines' images agree.
 from .software_rendering import (
@@ -33,14 +41,44 @@ if TYPE_CHECKING:
 # functions that use it: each child process re-imports this module.
 
 
-class RenderReport(BaseModel):
+class RenderReport(DiagnosticReport):
     """The result of rendering a build to an image."""
-
-    model_config = ConfigDict(frozen=True)
 
     ok: bool
     image_path: Path | None = None  # the written contact sheet, when ok
     error: str | None = None  # a clean message or a traceback when not ok
+
+
+class _ExportFailure(RuntimeError):
+    """LDraw writing failed before mesh conversion could start."""
+
+    def __init__(self, cause: Exception) -> None:
+        super().__init__(str(cause))
+        self.cause = cause
+
+
+def output_diagnostic(exc: Exception, stage: str, record: Record) -> Diagnostic:
+    """Distinguish LDraw writing, rendering, and a missing parts library."""
+    from ldraw2mesh.library import LDrawLibraryNotFound
+
+    if isinstance(exc, _ExportFailure):
+        exc, stage = exc.cause, "export"
+    evidence: dict[str, JsonValue] = {}
+    if isinstance(exc, LDrawLibraryNotFound):
+        return exception_diagnostic(
+            exc,
+            "render",
+            code="output.ldraw_library_missing",
+            evidence={"environment_variable": "LDRAW_LIBRARY_PATH"},
+            next_action="Install the LDraw parts library and set LDRAW_LIBRARY_PATH to its root, then render again.",
+        )
+    if isinstance(exc, OSError) and exc.filename is not None:
+        evidence["failed_path"] = str(exc.filename)
+    if stage == "export":
+        evidence["path"] = str(record.ldr_path.relative_to(record.path))
+    return exception_diagnostic(
+        exc, stage, code=f"output.{stage}_failed", evidence=evidence
+    )
 
 
 def render_available() -> bool:
@@ -56,12 +94,12 @@ def render_available() -> bool:
 
 def render(record: Record, config: Config | None = None) -> RenderReport:
     """Create the build and render the four views tiled into one contact sheet."""
-    return _in_subprocess(_render, (record,), config)
+    return _in_subprocess(_render, record, (), config)
 
 
 def render_views(record: Record, config: Config | None = None) -> RenderReport:
     """Create the build and render each canonical view plus the contact sheet."""
-    return _in_subprocess(_render_views, (record,), config)
+    return _in_subprocess(_render_views, record, (), config)
 
 
 def render_angle(
@@ -79,7 +117,11 @@ def render_angle(
     """
     destination = out_path or record.viewpoint_path
     return _in_subprocess(
-        _render_angle, (record, azimuth, elevation, destination), config
+        _render_angle,
+        record,
+        (azimuth, elevation, destination),
+        config,
+        operation="render_angle",
     )
 
 
@@ -112,40 +154,85 @@ def build_ldraw(record: Record, build: LegoBuild | None = None) -> Path:
 
 def build_mesh(record: Record, build: LegoBuild | None = None) -> Path:
     """Export the original and both diagnostic views as LDraw and glTF."""
-    _convert(build_ldraw(record, build), record.mesh_path)
+    try:
+        ldraw = build_ldraw(record, build)
+    except Exception as exc:
+        raise _ExportFailure(exc) from exc
+    _convert(ldraw, record.mesh_path)
     _convert(record.diagnostics_ldr_path, record.diagnostics_mesh_path)
     _convert_connectivity(record.connectivity_ldr_path, record.connectivity_mesh_path)
     return record.mesh_path
 
 
 def _in_subprocess(
-    fn: Callable[..., Path], args: tuple[Any, ...], config: Config | None
+    fn: Callable[..., Path],
+    record: Record,
+    args: tuple[Any, ...],
+    config: Config | None,
+    *,
+    operation: str = "render",
 ) -> RenderReport:
     """Run a render body in a child process under the render timeout."""
     config = config or Config()
+    try:
+        source = record.read_build()
+    except (OSError, UnicodeError) as exc:
+        return RenderReport(
+            ok=False,
+            error=str(exc),
+            diagnostics=[source_read_diagnostic(exc)],
+        )
     return build_execution.run_guarded(
         _reported,
-        (fn, *args),
+        (fn, record, source, *args),
         config.render_timeout,
-        lambda e: RenderReport(ok=False, error=f"Render failed: {e}"),
+        lambda e: RenderReport(
+            ok=False,
+            error=f"Render failed: {e}",
+            diagnostics=[
+                build_execution.subprocess_diagnostic(
+                    e, operation, config.render_timeout
+                )
+            ],
+        ),
     )
 
 
-def _reported(fn: Callable[..., Path], *args: Any) -> RenderReport:
-    """Run a render body, reporting the image it wrote or its traceback."""
+def _reported(
+    fn: Callable[..., Path], record: Record, source: str, *args: Any
+) -> RenderReport:
+    """Run a render body, reporting the phase that failed and its traceback."""
+    filename = str(record.build_path)
+    stage = "load_build"
     try:
-        return RenderReport(ok=True, image_path=fn(*args))
-    except Exception:
-        return RenderReport(ok=False, error=traceback.format_exc())
+        with redirect_stdout(io.StringIO()):
+            module = build_execution.load_build_module(filename, source)
+            stage = "create_build"
+            build = module.create_build()
+        if build is None:
+            raise TypeError("create_build() returned None; expected a LegoBuild")
+        stage = "render"
+        return RenderReport(ok=True, image_path=fn(record, build, *args))
+    except Exception as exc:
+        diagnostic = (
+            output_diagnostic(exc, stage, record)
+            if stage == "render"
+            else exception_diagnostic(exc, stage, filename=filename, source=source)
+        )
+        return RenderReport(
+            ok=False,
+            error=captured_traceback(exc, filename, source),
+            diagnostics=[diagnostic],
+        )
 
 
-def _render(record: Record) -> Path:
-    mesh2png(build_mesh(record), record.render_path)
+def _render(record: Record, build: LegoBuild) -> Path:
+    mesh2png(build_mesh(record, build), record.render_path)
     return record.render_path
 
 
-def _render_views(record: Record) -> Path:
-    views = _view_arrays(build_mesh(record))
+def _render_views(record: Record, build: LegoBuild) -> Path:
+    views = _view_arrays(build_mesh(record, build))
     for (_, view_path), tile in zip(record.render_views(), views):
         _save_png(tile, view_path)
     _save_png(tile_images(views), record.render_path)
@@ -153,10 +240,12 @@ def _render_views(record: Record) -> Path:
 
 
 def _render_angle(
-    record: Record, azimuth: float, elevation: float, out_path: Path
+    record: Record, build: LegoBuild, azimuth: float, elevation: float, out_path: Path
 ) -> Path:
     tile = _angle_array(
-        build_mesh(record), angle_to_view_dir(azimuth, elevation), angle_up(elevation)
+        build_mesh(record, build),
+        angle_to_view_dir(azimuth, elevation),
+        angle_up(elevation),
     )
     out_path.parent.mkdir(parents=True, exist_ok=True)
     _save_png(tile, out_path)

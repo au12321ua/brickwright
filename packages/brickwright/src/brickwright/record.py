@@ -449,9 +449,14 @@ class Record:
 
     def add_snapshot(self, source: str, report_json: str) -> Snapshot:
         """Archive a build's source and its report as the next numbered snapshot."""
+        snapshot = self.snapshot_source(source)
+        snapshot.report_path.write_text(report_json)
+        return snapshot
+
+    def snapshot_source(self, source: str) -> Snapshot:
+        """Archive source and return its numbered snapshot, ready for the report."""
         snapshot = Snapshot(_next_numbered_dir(self.snapshots_dir))
         snapshot.build_path.write_text(source)
-        snapshot.report_path.write_text(report_json)
         return snapshot
 
     def add_render_snapshot(self) -> Snapshot | None:

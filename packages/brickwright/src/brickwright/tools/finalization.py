@@ -4,18 +4,20 @@ from __future__ import annotations
 
 import traceback
 
-from pydantic import BaseModel, ConfigDict
-
 from ..config import Config
 from ..record import Record, StopReason
 from . import build_execution, rendering
-from .validation import ValidationReport, build_and_validate, save_validation
+from .diagnostics import DiagnosticReport
+from .validation import (
+    ValidationReport,
+    build_and_validate,
+    save_validation,
+    source_read_failure,
+)
 
 
-class FinalizationReport(BaseModel):
+class FinalizationReport(DiagnosticReport):
     """The result of finalizing a build."""
-
-    model_config = ConfigDict(frozen=True)
 
     ok: bool
     error: str | None = None  # the traceback/message when the build failed
@@ -25,13 +27,28 @@ class FinalizationReport(BaseModel):
 def finalize(record: Record, config: Config | None = None) -> FinalizationReport:
     """Validate and export one source snapshot and the one build it creates."""
     config = config or Config()
-    source = record.read_build()
+    try:
+        source = record.read_build()
+    except (OSError, UnicodeError) as exc:
+        validation = source_read_failure(exc)
+        record.clear_exports()
+        return FinalizationReport(
+            ok=False, validation=validation, error=validation.build_error
+        )
     record.clear_exports()
     report = build_execution.run_guarded(
         _finalize,
         (record, source),
         config.render_timeout,
-        lambda e: FinalizationReport(ok=False, error=f"Finalization failed: {e}"),
+        lambda e: FinalizationReport(
+            ok=False,
+            error=f"Finalization failed: {e}",
+            diagnostics=[
+                build_execution.subprocess_diagnostic(
+                    e, "finalize", config.render_timeout
+                )
+            ],
+        ),
     )
     if report.validation is not None:
         validation = save_validation(record, source, report.validation)
@@ -41,9 +58,10 @@ def finalize(record: Record, config: Config | None = None) -> FinalizationReport
                 update={"ok": False, "error": validation.build_error}
             )
     if report.ok:
+        assert report.validation is not None
         record.update_meta(
             finalized=True,
-            exported_source_sha256=record.source_sha256,
+            exported_source_sha256=report.validation.source_sha256,
             stop_reason=StopReason.FINALIZED,
         )
     else:
@@ -62,13 +80,18 @@ def _finalize(record: Record, source: str) -> FinalizationReport:
             or f"Validation failed: {', '.join(validation.failed_checks)}",
         )
     assert build is not None
+    stage = "render"
     try:
         if rendering.render_available():
             rendering.mesh2png(rendering.build_mesh(record, build), record.render_path)
         else:
+            stage = "export"
             rendering.build_ldraw(record, build)
-    except Exception:
+    except Exception as exc:
         return FinalizationReport(
-            ok=False, error=traceback.format_exc(), validation=validation
+            ok=False,
+            error=traceback.format_exc(),
+            validation=validation,
+            diagnostics=[rendering.output_diagnostic(exc, stage, record)],
         )
     return FinalizationReport(ok=True, validation=validation)
