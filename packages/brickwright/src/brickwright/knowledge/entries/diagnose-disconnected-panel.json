@@ -1,0 +1,61 @@
+{
+  "id": "diagnose-disconnected-panel",
+  "title": "Diagnose a panel that touches the wall without connecting",
+  "applicability": "Use when a part appears flush in the preview but a one-component check separates it from the wall. Static support can allow a separate grounded part to pass geometry checks.",
+  "aliases": [
+    "panel touches but falls off",
+    "flush decoration disconnected",
+    "floating façade panel",
+    "tile against smooth wall",
+    "面板贴着墙却未连接",
+    "墙饰明明贴住却没卡上",
+    "两部分不连通",
+    "看着挨在一起"
+  ],
+  "topics": [
+    "diagnosis",
+    "façade",
+    "panel",
+    "connected components",
+    "墙饰"
+  ],
+  "actions": [
+    "inspect contact",
+    "check connectivity",
+    "replace wall fitting"
+  ],
+  "parts": [
+    "3004",
+    "3024",
+    "11211"
+  ],
+  "diagnostics": [
+    "validation.connectivity",
+    "validation.floating"
+  ],
+  "steps": [
+    "Run the connected-component check. Compare the wall and panel occurrences with their connector lists. A common ground plane can support both separately, so a valid static report alone cannot confirm the panel's attachment.",
+    "The failing example rests a 3024 against a smooth 3004 wall. The panel's underside socket needs a front-facing stud at its position. Replace the wall fitting with 11211 and use one of its front open studs.",
+    "Mate the socket using connect and recheck both component count and collisions. On a wide panel, inspect every intended attachment point so a coincident corner does not hide a shifted or bent layout."
+  ],
+  "example": "diagnose_disconnected_panel.py",
+  "expected": "The original is statically valid and reports validation.connectivity with two components. The side-stud mount produces one valid component.",
+  "sources": [
+    {
+      "author": "Carlos Antelo",
+      "title": "Connector evidence and snapping",
+      "url": "https://github.com/anteloc/ldraw-nova/blob/d1e93d73f6ffe6955caa90953a98a0c90fbd5c5c/docs/agent/reference/connections.md",
+      "license": "CC BY-SA 4.0",
+      "adaptation": "Reference only. Connector inspection and observed contacts supplied the comparison question. The BrickWright guidance and example are original.",
+      "attribution_url": "https://github.com/anteloc/ldraw-nova/blob/d1e93d73f6ffe6955caa90953a98a0c90fbd5c5c/ATTRIBUTION.md"
+    },
+    {
+      "author": "Carlos Antelo",
+      "title": "Build with studs facing sideways",
+      "url": "https://github.com/anteloc/ldraw-nova/blob/d1e93d73f6ffe6955caa90953a98a0c90fbd5c5c/docs/agent/guides/snot.md",
+      "license": "CC BY-SA 4.0",
+      "adaptation": "Reference only. The sideways-stud guide prompted selection of a genuine outward-facing mount. The BrickWright guidance and example are original.",
+      "attribution_url": "https://github.com/anteloc/ldraw-nova/blob/d1e93d73f6ffe6955caa90953a98a0c90fbd5c5c/ATTRIBUTION.md"
+    }
+  ]
+}

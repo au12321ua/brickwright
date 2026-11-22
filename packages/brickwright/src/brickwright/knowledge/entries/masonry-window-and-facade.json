@@ -1,0 +1,71 @@
+{
+  "id": "masonry-window-and-facade",
+  "title": "Frame a window, tie in a wall corner and add exterior trim",
+  "applicability": "Use for a brick wall with a defined opening and an exterior facing. Choose the frame and pane by compatible fitting and the wall studs by the desired trim depth and direction.",
+  "aliases": [
+    "window opening and jambs",
+    "side-mounted windowsill trim",
+    "brick corner return",
+    "façade detail",
+    "glazed wall",
+    "墙角和开窗",
+    "窗洞窗框",
+    "外立面",
+    "窗台装饰",
+    "窗饰挂在墙外侧"
+  ],
+  "topics": [
+    "architecture",
+    "window",
+    "glazing",
+    "façade",
+    "窗饰",
+    "建筑"
+  ],
+  "actions": [
+    "frame opening",
+    "bond corner",
+    "seat pane",
+    "hang trim"
+  ],
+  "parts": [
+    "3795",
+    "2420",
+    "60593",
+    "3005",
+    "3004",
+    "11211",
+    "3710",
+    "60602",
+    "3069b"
+  ],
+  "diagnostics": [
+    "validation.connectivity",
+    "assembly.collision"
+  ],
+  "steps": [
+    "Start by reserving two studs by three bricks for the 60593 frame. Lay a sill and a corner return that ties the side wall into the front. Let the side piers set the lintel height and plan the joint in each brick course.",
+    "Fit the 60602 pane_tab to frame_slot, span the opening with the 3710 header and use the visible side studs of the 11211 in the right pier for trim. Build the trim as a separate finish so it can change without rebuilding the opening.",
+    "Check that the pane and trim are both engaged, the frame is supported at the sill, and the trim stays outside the wall plane. For a wider opening, measure the bearing on each side before extending the lintel."
+  ],
+  "example": "masonry_window_and_facade.py",
+  "expected": "The pane connects to the frame and the exterior trim stays forward of the wall plane. The sill, return, piers, frame and header belong to a valid single component.",
+  "sources": [
+    {
+      "author": "Carlos Antelo",
+      "title": "Old Trafford glazed wall study",
+      "url": "https://github.com/anteloc/ldraw-nova/blob/d1e93d73f6ffe6955caa90953a98a0c90fbd5c5c/examples/10272-glazed-wall/GUIDE.md",
+      "license": "CC BY-SA 4.0",
+      "adaptation": "Reference only. The study provided a comparison case for glazing and orientation. The sample uses a new straight corner and framed opening. The BrickWright guidance and example are original.",
+      "attribution_url": "https://github.com/anteloc/ldraw-nova/blob/d1e93d73f6ffe6955caa90953a98a0c90fbd5c5c/ATTRIBUTION.md"
+    },
+    {
+      "author": "Carlos Antelo",
+      "title": "Compose models from inspected modules",
+      "url": "https://github.com/anteloc/ldraw-nova/blob/d1e93d73f6ffe6955caa90953a98a0c90fbd5c5c/docs/agent/guides/compose-modules.md",
+      "license": "CC BY-SA 4.0",
+      "adaptation": "Reference only. The wall/finish module distinction provided context for the design tradeoff. The BrickWright guidance and example are original.",
+      "attribution_url": "https://github.com/anteloc/ldraw-nova/blob/d1e93d73f6ffe6955caa90953a98a0c90fbd5c5c/ATTRIBUTION.md"
+    }
+  ]
+}
