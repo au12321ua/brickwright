@@ -318,13 +318,22 @@ def record_connection(
     source: Connector,
     target: Connector,
     motion: MotionRange | None,
+    *,
+    parent_path: tuple[Placement, ...] | None = None,
+    child_path: tuple[Placement, ...] | None = None,
 ) -> Joint | None:
     """Resolve leaf ownership and preserve the mounted endpoint frames."""
     # Each leaf's cached world connectors rule out most leaves cheaply.
     candidates = (
-        path
-        for path, leaf in zip(leaf_paths(model.placements), model.flattened_placements)
-        if any(same_connector(c, target) for c in leaf.connectors)
+        (parent_path,)
+        if parent_path is not None
+        else (
+            path
+            for path, leaf in zip(
+                leaf_paths(model.placements), model.flattened_placements
+            )
+            if any(same_connector(c, target) for c in leaf.connectors)
+        )
     )
     parents = _find_endpoints(candidates, target)
     if not parents:
@@ -333,9 +342,16 @@ def record_connection(
                 "motion requires a target connector belonging to this model"
             )
         return None
-    children = _find_endpoints(
-        leaf_paths((placement,)), source.transformed(placement.pose)
+    child_paths = (
+        leaf_paths((placement,)) if child_path is None else ((placement, *child_path),)
     )
+    children = _find_endpoints(child_paths, source.transformed(placement.pose))
+    # An explicitly selected leaf gives ownership even if old part data
+    # annotates the same physical point more than once.
+    if parent_path is not None:
+        parents = parents[:1]
+    if child_path is not None:
+        children = children[:1]
     if len(parents) != 1 or len(children) != 1:
         raise ValueError("joint connector ownership is ambiguous")
     frame = Pose(target.frame, target.position)
@@ -375,7 +391,9 @@ def _find_endpoints(
     result = []
     for path in paths:
         pose = path_pose(path)
-        for connector in path[-1].content.connectors:
+        for connector in path[-1].content.find_connectors(
+            target.type, toward=pose.inverse.apply(target.position)
+        ):
             if same_connector(connector.transformed(pose), target):
                 result.append((path, connector, pose))
     return result
