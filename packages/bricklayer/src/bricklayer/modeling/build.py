@@ -12,6 +12,7 @@ from typing import Any, TypeAlias, TypeVar, cast
 from weakref import WeakKeyDictionary
 
 from .._mixins import Cached
+from ..diagnostics import DiagnosticError, connector_evidence
 from ..geometry import (
     Anchor,
     Connector,
@@ -832,7 +833,12 @@ def _resolve_connector(
     for connector in geometry.connectors:
         if same_connector(connector, spec):
             return connector
-    raise ValueError(f"{spec} is not a connector of {geometry!r}")
+    raise DiagnosticError(
+        f"{spec} is not a connector of {geometry!r}",
+        code="connector.not_found",
+        evidence={"source_connector": connector_evidence(spec)},
+        next_action="Pass an endpoint returned by find_connectors() on the content being placed.",
+    )
 
 
 def _is_grounded(placement: Placement, ground: float) -> bool:
