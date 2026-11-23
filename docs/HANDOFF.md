@@ -21,6 +21,8 @@
 
 P-004 至 P-006 待评审，分别用小屋与巴士检验结构归因、用喷气机检验独立外观返修、用巴士两组检验模块接口和并行成本。新增的 [P-007 草案](proposals/P-007-official-reference-assemblies.md)已复核 101 个官方轮组文件的基线；等价位姿逐例判定、误接反例、成类修正及全量筛查属于待实施验收。完整范围见[提案索引](proposals/README.md)。
 
+两项验收取舍已确认。事先声明可简化的装饰接口，在具体缺项有证据且两栏结构检查通过时可带限制交付。六题按整组检验交付、平台分和原始条件满足数不退步，喷气机用同机位盲评展示局部改善。[U-09](decisions.md#u-09--有证据的装饰接口缺项可带限制放行) · [U-10](decisions.md#u-10--六题整体不退步并展示局部改善)
+
 ## 连接装配、知识查询和零件覆盖
 
 - 从搭建意图查件可用 `bricklayer.find_connection_pairs`。已有模型可用 `find_connection_candidates` 查安装姿态，`trial_connections` 试装，`place_connection` 提交。内置代理和外部代理可收到同一组执行原因码、现场证据和修复建议。[连接驱动装配提案](proposals/P-001-connection-driven-building.md)
