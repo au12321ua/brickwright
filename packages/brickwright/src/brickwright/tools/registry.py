@@ -12,7 +12,7 @@ import json
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Generic, TypeVar
+from typing import Any, Generic, Literal, TypeVar
 
 from bricklayer.diagnostics import DiagnosticError
 from pydantic import ValidationError
@@ -60,6 +60,8 @@ from .validation import ValidationReport, validate
 def available_tools(config: Config | None = None) -> list[dict[str, Any]]:
     """The tools offered to the agent, gated by environment and ``config``."""
     excluded = set()
+    if config is None or not config.flow or config.is_subagent:
+        excluded.update(_FLOW_TOOLS)
     if not render_available():
         excluded.add("render")
     if config is not None and config.is_subagent:
@@ -137,13 +139,19 @@ def execute_tool(
         return ToolOutcome.failure(
             f"{name} failed: invalid arguments", argument_diagnostics(name, exc)
         )
-    return tool.handler(record, config, parsed)
+    try:
+        return tool.handler(record, config, parsed)
+    except (OSError, ValueError, DiagnosticError, RuntimeError) as exc:
+        if name not in _FLOW_TOOLS:
+            raise
+        issue = exception_diagnostic(exc, "flow", code="flow.invalid_input")
+        return ToolOutcome.failure(str(exc), [issue])
 
 
 def validation_outcome(report: ValidationReport) -> ToolOutcome:
     """The reply for a ``validate`` call that produced ``report``."""
     return ToolOutcome(
-        report.model_dump_json(),
+        report.agent_json(),
         ok=report.ok,
         report=report,
         diagnostics=report.diagnostics,
@@ -173,6 +181,16 @@ def format_subagent_results(results: list[SubagentResult]) -> str:
                     "result": r.text,
                     "reason": r.reason,
                     "record_id": r.record_id,
+                    **r.model_dump(
+                        include={
+                            "module",
+                            "session_id",
+                            "snapshot_id",
+                            "contract_sha256",
+                            "elapsed_seconds",
+                        },
+                        exclude_none=True,
+                    ),
                 }
                 for i, r in enumerate(results)
             ]
@@ -287,11 +305,15 @@ def _finalize(record: Record, config: Config, args: FinalizeArgs) -> ToolOutcome
         report.validation.diagnostics if report.validation is not None else []
     )
     if report.ok:
-        message = "ok: build compiled to out/build.ldr"
+        message = (
+            report.agent_json()
+            if report.flow
+            else "ok: build compiled to out/build.ldr"
+        )
     else:
         message = report.model_copy(
             update={"error": f"compile failed:\n{report.error}"}
-        ).model_dump_json()
+        ).agent_json()
     return ToolOutcome(
         message,
         ok=report.ok,
@@ -305,7 +327,109 @@ def _dispatch(record: Record, config: Config, args: DispatchArgs) -> ToolOutcome
     return subagent_outcome(dispatch_subagents(record, args.tasks, config))
 
 
+class ReadArtifactArgs(ToolArgs):
+    """Read the stored checklist or plan, including its JSON schema."""
+
+
+class WriteArtifactArgs(ToolArgs):
+    """Validate and save a complete artifact against the original task and plan."""
+
+    payload: dict[str, Any]
+
+
+class AlignedReviewArgs(ToolArgs):
+    """Render the structurally checked MPD at the supplied cameras, compare all goal images and ask an independent model for an image review."""
+
+    cameras: str | None = None
+    reference_dir: str | None = None
+
+
+class FreezeModulesArgs(ToolArgs):
+    """Freeze the current checked child snapshots for use by place_module in the parent."""
+
+
+def _artifact_outcome(result: dict[str, Any]) -> ToolOutcome:
+    diagnostics = [
+        Diagnostic.model_validate(issue) for issue in result.get("diagnostics", [])
+    ]
+    return ToolOutcome(
+        json.dumps(result, ensure_ascii=False),
+        ok=not diagnostics and result.get("ok", True),
+        diagnostics=diagnostics,
+    )
+
+
+def _read_artifact_tool(name: Literal["features", "plan"]) -> _Tool[ReadArtifactArgs]:
+    def read(record: Record, config: Config, args: ToolArgs) -> ToolOutcome:
+        from ..flow import read_artifact
+
+        return _artifact_outcome(read_artifact(record, name))
+
+    return _Tool(ReadArtifactArgs, read)
+
+
+def _write_artifact_tool(name: Literal["features", "plan"]) -> _Tool[WriteArtifactArgs]:
+    def write(record: Record, config: Config, args: WriteArtifactArgs) -> ToolOutcome:
+        from ..flow import set_artifact
+
+        return _artifact_outcome(set_artifact(record, name, args.payload))
+
+    return _Tool(WriteArtifactArgs, write)
+
+
+def _aligned_review(
+    record: Record, config: Config, args: AlignedReviewArgs
+) -> ToolOutcome:
+    from ..aligned_review import compare_record, render_cameras, run_independent_review
+    from ..driver.tracking import RunTracker
+
+    if (args.cameras is None) != (args.reference_dir is None):
+        raise ValueError(
+            "Supply both cameras and reference_dir, or omit both to match the prompt image."
+        )
+    if args.cameras is not None and args.reference_dir is not None:
+        render_cameras(record, Path(args.cameras), config)
+        compare_record(record, Path(args.reference_dir))
+    tracker = RunTracker()
+    try:
+        if args.cameras is None:
+            result = run_independent_review(
+                record, config, on_response=tracker.record, use_viewpoint=True
+            )
+        else:
+            result = run_independent_review(record, config, on_response=tracker.record)
+        outcome = _artifact_outcome(result)
+    except Exception as exc:
+        issue = exception_diagnostic(exc, "review", code="flow.review_failed")
+        outcome = ToolOutcome.failure(str(exc), [issue])
+    if tracker.cost_known() or tracker.has_unknown_cost():
+        outcome.usage = tracker.usage()
+    return outcome
+
+
+def _freeze_modules(
+    record: Record, config: Config, args: FreezeModulesArgs
+) -> ToolOutcome:
+    from ..modules import prepare_merge
+
+    merge = prepare_merge(record)
+    if merge is None:
+        return ToolOutcome("The plan contains no modules.", ok=False)
+    return ToolOutcome(json.dumps({"manifest_sha256": merge.manifest_sha256}))
+
+
+_FLOW_TOOLS: dict[str, _Tool[Any]] = {
+    "read_features": _read_artifact_tool("features"),
+    "set_features": _write_artifact_tool("features"),
+    "read_plan": _read_artifact_tool("plan"),
+    "set_plan": _write_artifact_tool("plan"),
+    "request_aligned_review": _Tool(AlignedReviewArgs, _aligned_review),
+    "freeze_modules": _Tool(FreezeModulesArgs, _freeze_modules),
+}
+
+
 _TOOLS: dict[str, _Tool[Any]] = {
+    **_FLOW_TOOLS,
     "read_build": _Tool(ReadBuildArgs, _read_build),
     "write_build": _Tool(WriteBuildArgs, _write_build),
     "insert_build": _Tool(InsertBuildArgs, _insert_build),

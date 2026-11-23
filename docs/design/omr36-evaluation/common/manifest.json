@@ -1,0 +1,7 @@
+{
+  "schema_version": 1,
+  "name": "brickwright-omr36-common",
+  "description": "Shared permissions and CLI entry point for the OMR36 BrickWright evaluation.",
+  "effects": ["agent_tools"],
+  "compatible_harnesses": ["codex"]
+}
