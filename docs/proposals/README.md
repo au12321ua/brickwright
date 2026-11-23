@@ -16,10 +16,13 @@
 | P-004 | draft | [流程放行与记录产物](P-004-flow-gates-and-records.md) |
 | P-005 | draft | [对齐渲染与特征评审](P-005-aligned-review.md) |
 | P-006 | draft | [模块接口与分块搭建](P-006-modular-building.md) |
+| P-007 | draft | [基于官方参考装配的批量验证与成类修复](P-007-official-reference-assemblies.md) |
 
 P-001 已通过离线验收。首轮 Maestro 外部代理对照的质量与完成度持平，连接放置占比下降。铰链修复后的外部复测通过原五题三项条件，原生代理的行为验收仍待运行。[复测结果](../design/p001-paired-evaluation.md#铰链修复复测结果) · [复测快照](http://localhost:8420/snapshots/snp_01m81459cgpjb3nee5gkwjz5tt)
 
 P-004 至 P-006 由[代理搭建流程总设计](../design/agent-build-flow.md)派生，三者的分工和对接问题见总设计的[派生提案](../design/agent-build-flow.md#9-派生提案)一节。
+
+P-007 从 P-003 的冻结发布目录提取有证据的接口，用 P-001 的默认候选预算验证装配，给 P-004 的标准目录重读提供可定位的复现。先验收轮组成类修复，再验收官方组合全量筛查和第二种机制的实际运行；每次修正回归所有已覆盖族及误接反例。[U-08](../decisions.md#u-08--官方参考装配的分批验收)
 
 ## 并行开发约定
 
