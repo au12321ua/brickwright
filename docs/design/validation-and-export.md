@@ -23,3 +23,21 @@
 内置工具和外部 CLI 在失败报告的 `diagnostics` 中给出原因码、失败阶段、说明、证据及可行的下一步。源码异常指向实际执行快照中的用户代码，静态或运动验证失败可定位到实例、零件对和采样姿态。验证报告的 `report_path` 相对于记录目录，指向此次验证的存档。历史报告缺少诊断字段时按空列表读取。
 
 正式导出从嵌套的 `validation.diagnostics` 传递模型验证问题。模型通过检查后发生的渲染或导出错误出现在正式导出报告自己的 `diagnostics` 中。知识库可用稳定原因码检索，例如 `brickwright knowledge search connector.ambiguous`。[诊断数据结构](../../packages/brickwright/src/brickwright/tools/diagnostics.py) · [执行入口一致性测试](../../packages/brickwright/tests/tools/test_execution_diagnostics.py) · [从歧义孔位修复到导出](../../packages/brickwright/tests/tools/test_connection_repair.py)
+
+## 连接查询与试装证据
+
+内置代理的探索和外部代理的 Python 脚本可以调用同一 SDK，再查看两个证据字典。
+
+```python
+query = {}
+candidates = build.find_connection_candidates(
+    host, content=incoming, target_rotation=aim, evidence=query
+)
+trials = {}
+build.trial_connections(candidates, evidence=trials)
+print(query, trials)
+```
+
+`query` 包含查询上限、返回数、请求的筛选和双方最多八个端点样例。端点同时给出零件局部和查询坐标系的类型、位置、轴向及侧向。在具体两端均有端点时，空结果可定位到宿主筛选、占用、配合规则或安装筛选等阶段。目录候选按限额查找，证据不足时标为未知。查询上限为零时记录限额。
+
+`trials` 给出试装上限、实际检查数、通过数、各拒因计数和前三个失败候选的原序号。传入有长度的容器时同时给出候选总数，迭代器的总数为空。碰撞样例标出双方端点、拟合位姿及冲突实例。提供目标时，报告以度计的旋转误差和以统一 stud 为单位的端点位移。对照成品时，需另核对零件原点的拟合平移。调用继续返回有序元组。
