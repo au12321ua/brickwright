@@ -17,7 +17,9 @@
 
 ## 下一阶段：代理搭建流程演示
 
-[总设计](design/agent-build-flow.md)规划了理解、规划、搭建、结构检查、外观评审和交付的完整流程，以 OMR36 从零版第二版六题演示。P-004 至 P-006 为草案，见[提案索引](proposals/README.md)。放宽时限后的 `develop` 基线已提交到 Maestro。[基线运行](http://localhost:8420/runs/run_01m834xe645ngv8jjcmc40svmx)
+[总设计](design/agent-build-flow.md)以 OMR36 从零版第二版六题演示理解、规划、搭建、结构检查、外观评审和交付。594effd 基线每题一次，六题通过平台交付，标准目录重读最终 MPD 均零碰撞、零悬空。四题连成一体，小屋 8 个组件、巴士 5 个。六题均尝试题目机位对照，五题打印过独立评审说明，实际派发为零。[基线运行](http://localhost:8420/runs/run_01m834xe645ngv8jjcmc40svmx)
+
+P-004 至 P-006 待评审，分别用小屋与巴士检验结构归因、用喷气机检验独立外观返修、用巴士两组检验模块接口和并行成本。新增的 [P-007 草案](proposals/P-007-official-reference-assemblies.md)已复核 101 个官方轮组文件的基线；等价位姿逐例判定、误接反例、成类修正及全量筛查属于待实施验收。完整范围见[提案索引](proposals/README.md)。
 
 ## 连接装配、知识查询和零件覆盖
 
