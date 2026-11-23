@@ -1,6 +1,6 @@
 # P-007 官方参考装配实测
 
-[提案与验收条件](../proposals/P-007-official-reference-assemblies.md) · [SDK 复跑入口](../../packages/bricklayer/src/bricklayer/ldraw/scripts/official_assemblies.py)
+[提案与验收条件](../proposals/archive/P-007-official-reference-assemblies.md) · [SDK 复跑入口](../../packages/bricklayer/src/bricklayer/ldraw/scripts/official_assemblies.py)
 
 冻结输入是 LDraw 2026-10。零件和依赖树 SHA-256 为 `332b133ffc9afb7584529b8425e9b7972f6599f8db469910845a83247b83cf74`。轮组复现了 101 个文件、98 个有序件对，文件名清单 SHA-256 为 `81cb98b4ba602799af999c1e9c3357986cbb7b5a8ecc4e7c8d1651b3ceecf34e`。两次运行的轮组样本 ID、通过状态、等价首命中排名和负例状态一致。
 
