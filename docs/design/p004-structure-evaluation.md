@@ -1,18 +1,19 @@
 # P-004 结构离线复放
 
-复放使用 BrickLayer SDK 0.1.0、LDraw 2026-10 发布目录和 P-004 的验证与定稿入口。标准栏在干净进程读取 MPD，记录栏执行归档搭建代码或导入作者参考解。归档小屋和巴士来自基线运行 `run_01m834xe645ngv8jjcmc40svmx`。参考解和题面来自 `brick-workspace/build/omr36-brickwright-v2/harbor-tasks`。规划是复放前填写的验收输入。归档的两份 `build.py` 只在复放副本中替换了测试所引用的 `/app/input` 路径，两份临时 MPD 均与原始交付件逐字节相同。[P-004](../proposals/P-004-flow-gates-and-records.md) · [U-09](../decisions.md#u-09--有证据的装饰接口缺项可带限制放行)
+初次复放使用修正轮辋连接前的 BrickLayer SDK 0.1.0、LDraw 2026-10 发布目录和 P-004 的验证与定稿入口。标准栏在干净进程读取 MPD，记录栏执行归档搭建代码或导入作者参考解。归档小屋和巴士来自基线运行 `run_01m834xe645ngv8jjcmc40svmx`。参考解和题面来自 `brick-workspace/build/omr36-brickwright-v2/harbor-tasks`。规划是复放前填写的验收输入。归档的两份 `build.py` 只在复放副本中替换了测试所引用的 `/app/input` 路径，两份临时 MPD 均与原始交付件逐字节相同。[P-004](../proposals/P-004-flow-gates-and-records.md) · [U-09](../decisions.md#u-09--有证据的装饰接口缺项可带限制放行)
 
-使用[复放脚本](../../scripts/replay_p004_structure.py)。以下命令在任务工作树执行，输出保存在主工作树的本地归档。
+使用[复放脚本](../../scripts/replay_p004_structure.py)。以下命令使用旧 SDK 保存历史结果。用当前 SDK 复放时选 `integrated-p007`，并从对应版本的工作树执行。脚本会核对目录 SHA-256，在输出目录下创建相应的版本子目录。重跑时指定新的输出目录。
 
 ```sh
-uv run python scripts/replay_p004_structure.py \
+uv run python /path/to/brickwright/scripts/replay_p004_structure.py \
+  --sdk-profile historical-pre-p007 \
   --dataset ../brick-workspace/build/omr36-brickwright-v2 \
   --baseline ../brickwright/.local/OMR36_BrickWright_v2_develop_594effd_Codex_baseline_1h_2h_budget-mc40svmx \
   --ldraw-library ../LDraw_标准零件库_20261111/ldraw \
   --output ../brickwright/.local/agent-build-flow/p004
 ```
 
-`summary.json` 汇总两栏件数、组件及分类。各场景的 `structure.json` 保存完整实例清单、子模型路径、位姿、各组件成员、接触件对、端点和 P-001 试装结论。`original-structure.json` 标注作者 MPD 原始字节重读，`structure.json` 标注产品临时 MPD 重读。下文的组件序号是各结构报告对应栏中的数组下标。表中 LDU 坐标为 LDraw 世界坐标，报告实例位姿使用 BrickLayer 的世界坐标。
+各版本的 `summary.json` 汇总两栏件数、组件及分类。各场景的 `structure.json` 保存完整实例清单、子模型路径、位姿、各组件成员、接触件对、端点和 P-001 试装结论。`original-structure.json` 标注作者 MPD 原始字节重读，`structure.json` 标注产品临时 MPD 重读。下文的组件序号是各结构报告对应栏中的数组下标。表中 LDU 坐标为 LDraw 世界坐标，报告实例位姿使用 BrickLayer 的世界坐标。每份复放报告的 `replay_sdk` 保存 SDK 版本、包源码位置、Git 提交、源码及包内数据的合并 SHA-256、标准目录和端点数据 SHA-256。原始产品快照所在的记录目录有相同信息的 `replay-sdk.json`。
 
 ## 原始完成条件
 
@@ -94,3 +95,17 @@ uv run python scripts/replay_p004_structure.py \
 | 标准栏加无法建模的件，或删去一片窗扇 | 分别触发导入跳过及 544/543 件数不符，报告不完整并阻断 |
 
 六道参考题的结构复放和上述反例属于离线验收。附件实跑、独立评审、正式配对的平台分和 18 条条件满足数单独记录。
+
+## P-007 修正后的对照
+
+历史 SDK 工作树为 `42453a5`。P-007 的轮辋端点修正通过 `3280f02` 进入 `develop`。集成复放在含重新核对的窗扇缺项证据的 `5413d15` 执行。两版均使用 LDraw 2026-10，目录 SHA-256 分别为 `c091fcce1e79bde06b59349146e3c40346d72b0d890ee05650ccc2c56d2b05a7` 和 `3060827da8b32194dae89907a368437316257f7c6c9d83a1b7ac9a438132e8b7`。完整独立归档见[历史复放](../../.local/agent-build-flow/p004/historical-pre-p007/summary.json)和[集成后复放](../../.local/agent-build-flow/p004/integrated-p007/summary.json)。最初的 `p004/summary.json` 及其逐例文件保留原样。[P-007](../proposals/P-007-official-reference-assemblies.md)
+
+| 巴士复放版本 | 记录栏组件 | 标准栏组件 | 放行结果 |
+| --- | --- | --- | --- |
+| 历史 SDK，归档源码 | 1007 | 1003 + 4 × 1 | 标准栏四个必需轮对断开，拒绝定稿 |
+| 集成 SDK，归档源码 | 1003 + 4 × 1 | 1007 | 记录栏四个必需轮对断开，归档附加连通性测试及定稿失败 |
+| 集成 SDK，去掉归档副本中重复的端点位移 | 1007 | 1007 | 四个必需轮对均实际咬合，结构放行 |
+
+三种情况的临时 MPD 均与原始归档字节一致。P-007 已把标准 `56904` 轮辋的轮胎座移至正确平面。归档源码继续偏移 2 LDU，造成记录栏失去咬合。集成版的标准目录中，归档巴士和参考巴士各自的 128 个隔离轮对试装全部通过，历史目录的对应试装全部碰撞。逐件坐标、候选位姿和试装结果见各巴士用例的 `standard-wheel-trials.json`。
+
+参考巴士两栏均从 14 个组件变为 10 个，四条已咬合的轮胎并入主体，主体由 1650 件变为 1654 件。其余九个原有断口继续阻断。小屋六个装饰窗扇在新目录中重新核对了原件相对位姿、直接接触、目录端点类型和零个试装候选，放行结论与历史版一致。两个版本均重跑了六道参考题、18 条原文保护、12 个结构反例和定稿边界夹具。
