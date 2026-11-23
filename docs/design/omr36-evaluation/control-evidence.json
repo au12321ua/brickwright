@@ -1,0 +1,93 @@
+{
+  "dataset": "dsv_01m83dm1efzv64mqy5kws888x8",
+  "preparation": "op_01m83dm1ek9t5747wwszyq82p7",
+  "run": "run_01m83dmfcd9vztwkpv59j8mcde",
+  "operation": "op_01m83dmfcdzag2fk8b8n0377yf",
+  "config_digest": "sha256:a3e09ee05611d47d31a228ae9a7532bc79da09b1ebfed871567617a96018d617",
+  "platform_score": 1.0,
+  "agent_wall_sec": 202.888898,
+  "exceptions": [],
+  "parent_and_child": [
+    {
+      "session_id": "01a206da-6177-7881-ad71-bcadeeeaa641",
+      "source": "exec",
+      "codex_version": "0.170.0",
+      "model": [
+        "gpt-6.2-sol"
+      ],
+      "effort": [
+        "medium"
+      ],
+      "tokens": {
+        "input_tokens": 63620,
+        "cached_input_tokens": 57984,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 328,
+        "reasoning_output_tokens": 0,
+        "total_tokens": 63948
+      },
+      "image_tool_call_ids": [],
+      "image_responses": 0,
+      "rollout": "rollout-2026-11-23T05-21-44-01a206da-6177-7881-ad71-bcadeeeaa641.jsonl",
+      "rollout_sha256": "5837ddb96a355b031bbd4418d34c6e99eb34cb0e4039944e6653dba22370ab58"
+    },
+    {
+      "session_id": "01a206db-6407-78d1-b42c-0b8ee078b43d",
+      "source": {
+        "subagent": {
+          "thread_spawn": {
+            "parent_thread_id": "01a206da-6177-7881-ad71-bcadeeeaa641",
+            "depth": 1,
+            "agent_path": "/root/reviewer",
+            "agent_nickname": "Gauss",
+            "agent_role": null
+          }
+        }
+      },
+      "codex_version": "0.170.0",
+      "model": [
+        "gpt-6.2-sol"
+      ],
+      "effort": [
+        "medium"
+      ],
+      "tokens": {
+        "input_tokens": 63099,
+        "cached_input_tokens": 27648,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 708,
+        "reasoning_output_tokens": 77,
+        "total_tokens": 63807
+      },
+      "image_tool_call_ids": [
+        "call_UW2N1HOdc9Nth1RJBjtLZxQ2"
+      ],
+      "image_responses": 4,
+      "rollout": "rollout-2026-11-23T05-22-51-01a206db-6407-78d1-b42c-0b8ee078b43d.jsonl",
+      "rollout_sha256": "3aace15a3ba4d580bccaf13e3421c93de445326ca4257fd356c6f7c03991d85e"
+    }
+  ],
+  "response": {
+    "view": "face",
+    "box": [
+      704,
+      280,
+      902,
+      428
+    ],
+    "observation": "目标图的双垂尾具有连续上斜前缘，外侧为平整的深蓝面，白色沿顶边及后缘。候选图的前缘呈明显的阶梯形，外侧可见多排凸粒。",
+    "cross_view": "end 视角也能看到目标双垂尾各有一条平整的深蓝正面，候选的对应表面偏灰，内侧边缘露出白色凸粒。端视图还能确认两者都有向外倾斜的双垂尾。",
+    "preserve": "保留宽展的深蓝机翼、连续白色下沿，以及 end 视角中左绿右红的翼尖灯。"
+  },
+  "response_sha256": "ef2244a75c7db6cbfac093264d6347466519038f9616d08a965d2b8e0eae611b",
+  "reviewed_views": [
+    "goal-end.png",
+    "candidate-end.png",
+    "goal-face.png",
+    "candidate-face.png"
+  ],
+  "parent_tool_calls": [
+    "spawn_agent",
+    "wait_agent"
+  ]
+}

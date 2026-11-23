@@ -1,0 +1,6 @@
+This is the OMR36 independent visual review control. Do not build or repair a model.
+Use Codex's native `spawn_agent` to dispatch exactly one independent reviewer, with the same gpt-6.2-sol medium model, and wait for its response. Send it the following task without any hints about an expected difference:
+
+> Independently open and inspect `/app/input/goal-end.png`, `/app/control/candidate-end.png`, `/app/input/goal-face.png`, and `/app/control/candidate-face.png` using the image tool. Compare each goal with its paired candidate. Locate one meaningful visible difference, with view name and pixel bounding box [left, top, right, bottom] in the original size. Explain whether the other camera supports the observation. Also report an important shared feature the builder should preserve. Write `/logs/artifacts/review-dispatch.json` as a JSON object with `view`, `box`, `observation`, `cross_view`, and `preserve` fields, then return the file path to the parent. The parent has no observation to share.
+
+After the reviewer has completed, check that its file exists, and stop. Do not write or replace the child's file yourself. This trial's output is the independent review file. The usual modeling workflow in /app/AGENTS.md does not apply to this control.
