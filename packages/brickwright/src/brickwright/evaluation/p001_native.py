@@ -45,6 +45,13 @@ def _bound_responses(api_base: str, key_file: Path) -> Generator[None]:
                 raise RuntimeError(
                     "evaluation must use the native OpenAI Responses route"
                 )
+            dispatch_mcp(tools=kwargs.get("tools"))
+            # LiteLLM's local model table lacks this GPT-6 route's native
+            # function tool choice. Pass it through alongside reasoning.
+            kwargs["allowed_openai_params"] = [
+                *(kwargs.get("allowed_openai_params") or ()),
+                "tool_choice",
+            ]
             try:
                 return original(
                     *positional,
@@ -52,6 +59,7 @@ def _bound_responses(api_base: str, key_file: Path) -> Generator[None]:
                     client=handler,
                     api_key=key,
                     api_base=api_base,
+                    _skip_mcp_handler=True,
                 )
             except (openai.APIError, httpx.HTTPError, ValueError) as error:
                 status = getattr(error, "status_code", None)
