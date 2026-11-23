@@ -10,7 +10,8 @@ from typing import Annotated, Literal
 import numpy as np
 from pydantic import BaseModel, Field, FiniteFloat, model_validator
 
-from .tools.rendering import lit_scene
+from .tools.rendering import _angle_array, lit_scene
+from .tools.software_rendering import angle_to_view_dir, angle_up
 
 Vec3 = tuple[FiniteFloat, FiniteFloat, FiniteFloat]
 Pixels = Annotated[int, Field(strict=True, gt=0)]
@@ -135,3 +136,23 @@ def _convert_sorted(model: Path, glb: Path, library: Path | None) -> None:
             sorted(job.transforms, key=lambda matrix: np.asarray(matrix).tobytes())
         )
     write_gltf(jobs, load_color_table(str(library)), glb)
+
+
+class MatchedAngle(BaseModel):
+    azimuth: FiniteFloat
+    elevation: Annotated[FiniteFloat, Field(ge=-90, le=90)]
+
+
+def render_matched_model(model: Path, camera: MatchedAngle, output: Path) -> None:
+    """Frame a checked model at the standard matched-viewpoint angles."""
+    from PIL import Image
+
+    with TemporaryDirectory() as scratch:
+        glb = Path(scratch) / "model.glb"
+        _convert_sorted(model, glb, None)
+        frame = _angle_array(
+            glb,
+            angle_to_view_dir(camera.azimuth, camera.elevation),
+            angle_up(camera.elevation),
+        )
+    Image.fromarray(frame).save(output)

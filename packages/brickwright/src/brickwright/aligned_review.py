@@ -11,15 +11,23 @@ from importlib import import_module
 from io import BytesIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID, uuid4
 
-from PIL import Image
+from PIL import Image, ImageOps
 from pydantic import BaseModel, TypeAdapter, ValidationError
 
 from ._aligned_compare import compare_images, read_rgba
-from ._aligned_render import Cameras, render_model
-from ._review_reports import REVIEW_GUIDANCE, FailedReport, Judgment, Report, Reviewer
+from ._aligned_render import Cameras, MatchedAngle, render_matched_model, render_model
+from ._review_reports import (
+    FIXED_GUIDANCE,
+    MATCHED_GUIDANCE,
+    REVIEW_GUIDANCE,
+    FailedReport,
+    Judgment,
+    Report,
+    Reviewer,
+)
 from .config import Config
 from .record import Record
 from .tools.build_execution import load_build_module, run_in_subprocess
@@ -46,30 +54,33 @@ class _Asset(BaseModel):
 
 
 class _Render(BaseModel):
-    schema_version: int = 1
+    schema_version: Literal[1] = 1
     snapshot_id: str | None
     source_sha256: str
     model_sha256: str
     cameras: _Asset
     image_pixels: tuple[int, int]
     views: dict[str, _Asset]
+    alignment: Literal["fixed_cameras", "matched_viewpoint"] = "fixed_cameras"
 
 
 class _Comparison(BaseModel):
-    schema_version: int = 1
+    schema_version: Literal[1] = 1
     render: _Asset
     references: dict[str, _Asset]
     overlays: dict[str, _Asset]
     metrics: dict[str, dict[str, Any]]
+    image_pixels: tuple[int, int] | None = None
 
 
 class _PrivateInputs(BaseModel):
-    schema_version: int = 1
+    schema_version: Literal[1] = 1
     manifest_sha256: str
     snapshot_id: str
     source_sha256: str
     prompt_sha256: str | None
     parent_session_id: str | None
+    prompt_image: str | None = None
     assets: dict[str, _Asset]
 
 
@@ -170,6 +181,8 @@ def compare_record(record: Record, reference_dir: Path) -> dict:
     render = _Render.model_validate_json(render_asset.read(record))
     if render.source_sha256 != record.source_sha256:
         raise ValueError("build changed. Render the current version before comparing")
+    if render.alignment != "fixed_cameras":
+        raise ValueError("pixel comparison requires fixed-camera renders")
     render.cameras.read(record)
     references, overlays, metrics = {}, {}, {}
     with TemporaryDirectory() as scratch:
@@ -214,7 +227,7 @@ def _prompt_text(record: Record) -> str:
     return json.loads(record.meta_path.read_bytes()).get("prompt") or ""
 
 
-def _prepare_round(record: Record, parent_session_id: str | None) -> Path:
+def _require_structure(record: Record) -> dict:
     state = _structural_state(record)
     if not (
         state.get("structural_passed")
@@ -229,6 +242,72 @@ def _prepare_round(record: Record, parent_session_id: str | None) -> Path:
         raise ValueError(
             "review requires valid original conditions and a valid feature checklist"
         )
+    return state
+
+
+def _prompt_image_name(record: Record) -> str | None:
+    return json.loads(record.meta_path.read_bytes()).get("prompt_image")
+
+
+def _prepare_matched_view(
+    record: Record, angles: tuple[float, float], config: Config | None
+) -> None:
+    state = _require_structure(record)
+    image_name = _prompt_image_name(record)
+    if not image_name:
+        raise ValueError("matched viewpoint review requires a prompt image")
+    prompt_image = _Asset.capture(record, record.path / image_name)
+    with Image.open(BytesIO(prompt_image.read(record))) as image:
+        reference_size = ImageOps.exif_transpose(image).size
+
+    camera = MatchedAngle(azimuth=angles[0], elevation=angles[1])
+    source_digest = record.source_sha256
+    model = Path(state["mpd_path"]).read_bytes()
+    with TemporaryDirectory() as directory:
+        scratch = Path(directory)
+        mpd, rendered = scratch / "model.ldr", scratch / "matched.png"
+        mpd.write_bytes(model)
+        run_in_subprocess(
+            render_matched_model,
+            (mpd, camera, rendered),
+            (config or Config()).render_timeout,
+        )
+        with Image.open(rendered) as image:
+            candidate_size = image.size
+        if source_digest != record.source_sha256:
+            raise ValueError("build changed during matched-viewpoint rendering")
+        camera_file = record.out_dir / "matched-camera.json"
+        candidate = record.out_dir / "views/matched.png"
+        camera_spec = camera.model_dump(mode="json") | {"method": "matched_viewpoint"}
+        _replace(camera_file, _json(camera_spec))
+        color_data = rendered.read_bytes()
+        _replace(candidate, color_data)
+    view = _Asset.capture(record, candidate)
+    if view.sha256 != _hash(color_data):
+        raise ValueError("matched view changed during rendering")
+    render = _Render(
+        snapshot_id=state["snapshot_id"],
+        source_sha256=source_digest,
+        model_sha256=_hash(model),
+        cameras=_Asset.capture(record, camera_file),
+        image_pixels=candidate_size,
+        views={"matched": view},
+        alignment="matched_viewpoint",
+    )
+    _replace(_render_path(record), _json(render.model_dump(mode="json")))
+    comparison = _Comparison(
+        render=_Asset.capture(record, _render_path(record)),
+        references={"matched": prompt_image},
+        overlays={},
+        metrics={"matched": {"pixel_scores": None, "regions": []}},
+        image_pixels=reference_size,
+    )
+    _replace(_comparison_path(record), _json(comparison.model_dump(mode="json")))
+
+
+def _prepare_round(record: Record, parent_session_id: str | None) -> Path:
+    state = _require_structure(record)
+    descriptions = state["artifacts"]
     model = Path(state["mpd_path"])
     snapshot_id = state["snapshot_id"]
     comparison_asset = _Asset.capture(record, _comparison_path(record))
@@ -272,13 +351,25 @@ def _prepare_round(record: Record, parent_session_id: str | None) -> Path:
         images = {
             f"goal-{view}.png": comparison.references[view],
             f"candidate-{view}.png": render.views[view],
-            f"overlay-{view}.png": comparison.overlays[view],
         }
+        if view in comparison.overlays:
+            images[f"overlay-{view}.png"] = comparison.overlays[view]
         assets.update(images)
         required_images.extend(images)
     round_id = uuid4().hex
     destination = _round_path(record, round_id)
     prompt = _prompt_text(record).encode("utf-8") if not task.is_file() else None
+    prompt_image = None
+    if render.alignment == "matched_viewpoint":
+        prompt_image = _prompt_image_name(record)
+        if (
+            not prompt_image
+            or _Asset.capture(record, record.path / prompt_image)
+            != comparison.references["matched"]
+        ):
+            raise ValueError(
+                "prompt image changed; match the current reference viewpoint"
+            )
     public_files = {
         key: value for key, value in assets.items() if not key.startswith("_")
     }
@@ -287,12 +378,19 @@ def _prepare_round(record: Record, parent_session_id: str | None) -> Path:
         for name, asset in public_files.items()
         if name != "comparison.json"
     }
+    if prompt_image is not None:
+        target = "goal-matched.png"
+        with Image.open(BytesIO(files[target])) as image:
+            png = BytesIO()
+            ImageOps.exif_transpose(image).convert("RGBA").save(png, format="PNG")
+            files[target] = png.getvalue()
     if prompt is not None:
         files["prompt.txt"] = prompt
     # Expose the metrics and view names without live paths or builder artifacts.
+    image_pixels = comparison.image_pixels or render.image_pixels
     files["metrics.json"] = _json(
         {
-            "image_pixels": render.image_pixels,
+            "image_pixels": image_pixels,
             "views": comparison.metrics,
         }
     )
@@ -303,7 +401,8 @@ def _prepare_round(record: Record, parent_session_id: str | None) -> Path:
         "model_sha256": model_asset.sha256,
         "structure_sha256": assets["_structure.json"].sha256,
         "parent_session_id": parent_session_id,
-        "image_pixels": render.image_pixels,
+        "image_pixels": image_pixels,
+        "alignment": render.alignment,
         "image_reads": required_images,
         "files": {name: _hash(data) for name, data in files.items()},
     }
@@ -318,6 +417,7 @@ def _prepare_round(record: Record, parent_session_id: str | None) -> Path:
         source_sha256=render.source_sha256,
         prompt_sha256=_hash(prompt) if prompt is not None else None,
         parent_session_id=parent_session_id,
+        prompt_image=prompt_image,
         assets=assets,
     )
     destination.parent.mkdir(parents=True, exist_ok=True)
@@ -340,23 +440,61 @@ def _prepare_round(record: Record, parent_session_id: str | None) -> Path:
     return destination
 
 
-def review_instructions(record: Record, *, parent_session_id: str | None = None) -> str:
+def review_instructions(
+    record: Record,
+    *,
+    parent_session_id: str | None = None,
+    matched_angle: tuple[float, float] | None = None,
+    config: Config | None = None,
+) -> str:
     """Freeze the current packet and print the inputs for a fresh external reviewer."""
+    if matched_angle is not None:
+        _prepare_matched_view(record, matched_angle, config)
+    if not _comparison_path(record).is_file():
+        return _match_viewpoint_instructions(record)
     round_path = _prepare_round(record, parent_session_id)
     manifest = round_path / "inputs/manifest.json"
+    manifest_bytes = manifest.read_bytes()
+    guidance = _review_guidance(json.loads(manifest_bytes))
     return (
-        f"Dispatch a fresh, independent reviewer with no builder history. "
+        "Dispatch a fresh, independent reviewer with no builder history. "
         f"Give it just the frozen packet in {manifest.parent.resolve()} and the instructions below. "
-        f"The round ID is {round_path.name}; input_sha256 is {_hash(manifest.read_bytes())}. "
+        f"The round ID is {round_path.name}; input_sha256 is {_hash(manifest_bytes)}. "
         "Copy the reviewer session and parent session from the dispatch receipt. "
         "Keep the dispatch and image-open evidence. Submit the returned JSON with "
         f"`brickwright external review {record.id} --set REPORT.json`. "
         "If dispatch fails or the reviewer cannot read the images, submit schema_version, "
         "round_id, input_sha256, and failure_reason to archive the failed attempt.\n\n"
-        f"{REVIEW_GUIDANCE}\n"
+        f"{guidance}\n"
         "Copy all image_reads names from the manifest only after opening those files. "
         "Return this JSON schema with the round ID and digest above.\n"
         f"{json.dumps(Report.model_json_schema(), indent=2)}"
+    )
+
+
+def _review_guidance(manifest: dict) -> str:
+    matched = manifest.get("alignment") == "matched_viewpoint"
+    return (MATCHED_GUIDANCE if matched else FIXED_GUIDANCE) + "\n\n" + REVIEW_GUIDANCE
+
+
+def _match_viewpoint_instructions(record: Record) -> str:
+    from .driver.external_critique import external_viewpoint_prompt
+
+    _require_structure(record)
+    image_name = _prompt_image_name(record)
+    if not image_name:
+        raise ValueError(
+            "render and compare fixed camera views, or attach a prompt image"
+        )
+    match = external_viewpoint_prompt(record.id, str(record.viewpoint_path.resolve()))
+    return (
+        "Dispatch a fresh viewpoint-matching agent with these instructions. "
+        "The selected angles will be used to render the checked snapshot for the independent visual review.\n"
+        f"Reference: {(record.path / image_name).resolve()}\n"
+        f"Build source for viewpoint matcher: {record.build_path.resolve()}\n\n"
+        f"{match}\n\n"
+        "Use the returned angles to prepare the independent review packet:\n"
+        f"brickwright external review-instructions {record.id} --azimuth <A> --elevation <E>"
     )
 
 
@@ -368,6 +506,14 @@ def _read_manifest(round_path: Path) -> tuple[_PrivateInputs, dict]:
     if _hash(manifest) != private.manifest_sha256:
         raise ValueError("frozen review manifest changed")
     parsed = json.loads(manifest)
+    if (
+        parsed["round_id"] != round_path.name
+        or parsed["snapshot_id"] != private.snapshot_id
+        or parsed["parent_session_id"] != private.parent_session_id
+        or parsed["model_sha256"] != private.assets["_build.ldr"].sha256
+        or parsed["structure_sha256"] != private.assets["_structure.json"].sha256
+    ):
+        raise ValueError("frozen review manifest bindings changed")
     for name, digest in parsed["files"].items():
         if _hash((round_path / "inputs" / name).read_bytes()) != digest:
             raise ValueError(f"frozen review input changed: {name}")
@@ -380,26 +526,37 @@ def _read_manifest(round_path: Path) -> tuple[_PrivateInputs, dict]:
     return private, parsed
 
 
+def _live_inputs_match(record: Record, private: _PrivateInputs) -> bool:
+    if record.source_sha256 != private.source_sha256:
+        return False
+    task_exists = (record.path / "task.json").is_file()
+    if private.prompt_sha256 is None:
+        if not task_exists:
+            return False
+    elif (
+        task_exists
+        or _hash(_prompt_text(record).encode("utf-8")) != private.prompt_sha256
+    ):
+        return False
+    if (record.path / "merge-manifest.json").is_file() != (
+        "_merge-manifest.json" in private.assets
+    ):
+        return False
+    if (
+        private.prompt_image is not None
+        and _prompt_image_name(record) != private.prompt_image
+    ):
+        return False
+    for asset in private.assets.values():
+        asset.read(record)
+    return True
+
+
 def review_inputs_current(record: Record, round_id: str) -> bool:
     """Check recorded digests without calling flow_status or Record.read_meta."""
     try:
         private, _ = _read_manifest(_round_path(record, round_id))
-        if record.source_sha256 != private.source_sha256:
-            return False
-        if private.prompt_sha256 is None:
-            if not (record.path / "task.json").is_file():
-                return False
-        elif (record.path / "task.json").is_file() or _hash(
-            _prompt_text(record).encode("utf-8")
-        ) != private.prompt_sha256:
-            return False
-        if (record.path / "merge-manifest.json").is_file() != (
-            "_merge-manifest.json" in private.assets
-        ):
-            return False
-        for asset in private.assets.values():
-            asset.read(record)
-        return True
+        return _live_inputs_match(record, private)
     except (OSError, ValueError, KeyError, TypeError):
         return False
 
@@ -419,7 +576,7 @@ def _check_report(report: Report, packet: Path, manifest: dict) -> list[str]:
     expected_reads = manifest["image_reads"]
     if sorted(report.reviewer.image_reads) != sorted(expected_reads):
         raise ValueError(
-            "review receipt must record reading every target, render, and overlay"
+            "review receipt must record reading every target, render, and provided overlay"
         )
     if manifest["parent_session_id"] not in (None, report.reviewer.parent_session_id):
         raise ValueError("review receipt refers to a different parent session")
@@ -464,13 +621,34 @@ def _check_report(report: Report, packet: Path, manifest: dict) -> list[str]:
     return remaining
 
 
+def _publish_once(path: Path, data: bytes) -> bool:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    stage = path.parent / f".{uuid4().hex}.tmp"
+    try:
+        stage.write_bytes(data)
+        stage.chmod(0o444)
+        try:
+            os.link(stage, path)
+        except FileExistsError:
+            return False
+        return True
+    finally:
+        stage.unlink(missing_ok=True)
+
+
+def _claim_session(record: Record, report: Report) -> None:
+    session = _hash(report.reviewer.session_id.encode("utf-8"))
+    path = record.path / "reviews" / "sessions" / session
+    owner = report.round_id.encode("ascii")
+    if not _publish_once(path, owner) and path.read_bytes() != owner:
+        raise ValueError("this independent session already reviewed another round")
+
+
 def _submit(record: Record, raw: bytes) -> dict:
     data = TypeAdapter(dict[str, Any]).validate_json(raw)
     report = (FailedReport if "failure_reason" in data else Report).model_validate(data)
     round_path = _round_path(record, report.round_id)
     private, manifest = _read_manifest(round_path)
-    if manifest["round_id"] != report.round_id:
-        raise ValueError("review manifest belongs to another round")
     if report.input_sha256 != private.manifest_sha256:
         raise ValueError("review report does not match the original input digest")
     report_data = report.model_dump(mode="json")
@@ -486,6 +664,7 @@ def _submit(record: Record, raw: bytes) -> dict:
         status = "failed"
     else:
         remaining = _check_report(report, round_path / "inputs", manifest)
+        _claim_session(record, report)
         state = _structural_state(record)
         status = (
             "accepted"
@@ -508,21 +687,11 @@ def _submit(record: Record, raw: bytes) -> dict:
         "report": report_data,
     }
     # One immutable receipt per round, including with concurrent/repeated submissions.
-    stage = round_path / f".{uuid4().hex}.tmp"
-    try:
-        stage.write_bytes(_json(result))
-        stage.chmod(0o444)
-        try:
-            os.link(stage, destination)
-        except FileExistsError:
-            existing = json.loads(destination.read_bytes())
-            if existing["report"] != report_data:
-                raise ValueError(
-                    "this review round already has a different report"
-                ) from None
-            return existing
-    finally:
-        stage.unlink(missing_ok=True)
+    if not _publish_once(destination, _json(result)):
+        existing = json.loads(destination.read_bytes())
+        if existing["report"] != report_data:
+            raise ValueError("this review round already has a different report")
+        return existing
     if status == "accepted":
         _replace(record.path / "review.json", _json(result))
     return result
@@ -542,14 +711,15 @@ def review_status(record: Record, snapshot_id: str) -> dict:
             receipt = json.loads(path.read_bytes())
             if receipt["status"] != "accepted":
                 continue
-            rounds += 1
+            inputs, _ = _read_manifest(path.parent)
             if (
-                receipt["snapshot_id"] == snapshot_id
-                and receipt["round_id"] == path.parent.name
-                and receipt["input_sha256"]
-                == _hash((path.parent / "inputs/manifest.json").read_bytes())
-                and review_inputs_current(record, path.parent.name)
+                receipt["round_id"] != path.parent.name
+                or receipt["snapshot_id"] != inputs.snapshot_id
+                or receipt["input_sha256"] != inputs.manifest_sha256
             ):
+                continue
+            rounds += 1
+            if inputs.snapshot_id == snapshot_id and _live_inputs_match(record, inputs):
                 current.append(receipt)
         except (OSError, ValueError, KeyError, TypeError):
             continue
@@ -570,6 +740,7 @@ def run_independent_review(
     on_response: Callable[[Any], None] | None = None,
     *,
     complete: Callable[..., Any] | None = None,
+    use_viewpoint: bool = False,
 ) -> dict:
     """Call a fresh image-capable critic with only the frozen review evidence."""
     from .driver.completion import litellm_complete
@@ -580,6 +751,16 @@ def run_independent_review(
         raise ValueError(
             "configure a critique model before requesting an independent review"
         )
+    if use_viewpoint:
+        from .driver.viewpoint import match_viewpoint
+
+        _require_structure(record)
+        matched = match_viewpoint(
+            record, config, complete=complete, on_response=on_response
+        )
+        if matched is None:
+            raise ValueError("viewpoint matcher did not find a usable camera angle")
+        _prepare_matched_view(record, (matched.azimuth, matched.elevation), config)
     parent = f"brickwright-builder:{record.id}"
     round_path = _prepare_round(record, parent)
     private, manifest = _read_manifest(round_path)

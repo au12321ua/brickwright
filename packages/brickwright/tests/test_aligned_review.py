@@ -189,10 +189,8 @@ def reviewed_record(tmp_path, monkeypatch):
 def _open_round(record):
     instructions = review.review_instructions(record, parent_session_id="builder-42")
     assert "fresh, independent" in instructions
-    rounds = sorted(
-        (record.path / "reviews").iterdir(), key=lambda path: path.stat().st_mtime_ns
-    )
-    packet = rounds[-1] / "inputs"
+    rounds = (record.path / "reviews").glob("*/inputs/manifest.json")
+    packet = max(rounds, key=lambda path: path.stat().st_mtime_ns).parent
     manifest = packet / "manifest.json"
     data = json.loads(manifest.read_bytes())
     assert "build.py" not in data["files"]
@@ -394,3 +392,123 @@ def test_native_review_sees_images_in_fresh_request_and_accounts_usage(reviewed_
     assert saved["status"] == "accepted"
     assert saved["report"]["reviewer"]["dispatch"] == "independent_model"
     assert review.review_status(record, "first")["passed"]
+
+
+def test_new_comparison_invalidates_outstanding_review_even_if_original_images_persist(
+    reviewed_record, tmp_path
+):
+    record, _, reference = reviewed_record
+    _, report = _open_round(record)
+    replacement = tmp_path / "new-reference"
+    replacement.mkdir()
+    for path in reference.iterdir():
+        (replacement / path.name).write_bytes(path.read_bytes())
+    with Image.open(replacement / "goal-top.png") as image:
+        image.putpixel((0, 0), (240, 60, 240, 255))
+        image.save(replacement / "goal-top.png")
+    review.compare_record(record, replacement)
+    assert _submit(record, report, tmp_path)["status"] == "stale"
+
+
+def test_new_review_cannot_reuse_reviewer_session(reviewed_record, tmp_path):
+    record, _, _ = reviewed_record
+    _, first = _open_round(record)
+    assert _submit(record, first, tmp_path)["status"] == "accepted"
+    _, next_round = _open_round(record)
+    next_round["reviewer"]["session_id"] = first["reviewer"]["session_id"]
+    with pytest.raises(ValueError, match="already reviewed another round"):
+        _submit(record, next_round, tmp_path)
+    assert review.review_status(record, "first")["rounds"] == 1
+
+
+def test_external_review_can_fall_back_to_matched_viewpoint(
+    reviewed_record, monkeypatch
+):
+    record, state, _ = reviewed_record
+    (record.out_dir / "comparison.json").unlink()
+    portrait = record.path / "prompt.jpg"
+    Image.new("RGB", (100, 200), (80, 220, 140)).save(portrait)
+    record.meta_path.write_text(
+        json.dumps({"prompt": "Build a blue object", "prompt_image": portrait.name})
+    )
+    instructions = review.review_instructions(record)
+    assert "external render-angle" in instructions
+    assert "--azimuth <A> --elevation <E>" in instructions
+
+    def render_approximate(fn, args, timeout):
+        model, angles, output = args
+        assert model.read_bytes() == Path(state["mpd_path"]).read_bytes()
+        assert (angles.azimuth, angles.elevation) == (45, 30)
+        Image.new("RGBA", (90, 90), (72, 80, 200, 255)).save(output)
+
+    monkeypatch.setattr(review, "run_in_subprocess", render_approximate)
+    instructions = review.review_instructions(
+        record, parent_session_id="builder", matched_angle=(45, 30)
+    )
+    assert "reference image's coordinate system" in instructions
+    packet = next((record.path / "reviews").glob("*/inputs"))
+    manifest = json.loads((packet / "manifest.json").read_bytes())
+    assert manifest["alignment"] == "matched_viewpoint"
+    assert manifest["image_reads"] == ["goal-matched.png", "candidate-matched.png"]
+    assert manifest["image_pixels"] == [100, 200]
+    assert not (packet / "overlay-matched.png").exists()
+    with Image.open(packet / "goal-matched.png") as goal:
+        assert goal.format == "PNG"
+    metrics = json.loads((packet / "metrics.json").read_bytes())
+    assert metrics["views"]["matched"]["pixel_scores"] is None
+
+    receipt = {
+        "schema_version": 1,
+        "round_id": manifest["round_id"],
+        "input_sha256": review._hash((packet / "manifest.json").read_bytes()),
+        "reviewer": {
+            "session_id": "critique-1",
+            "parent_session_id": "builder",
+            "model": "gpt-6.2-sol",
+            "effort": "medium",
+            "dispatch": "codex_subagent",
+            "image_reads": manifest["image_reads"],
+        },
+        "conditions": [
+            {
+                "id": "C01",
+                "status": "satisfied",
+                "explanation": "Outline retained",
+                "evidence": [
+                    {
+                        "view": "matched",
+                        "bbox": [0, 0, 100, 200],
+                        "observation": "Full frame",
+                    }
+                ],
+            }
+        ],
+        "features": [
+            {
+                "id": "F01",
+                "status": "retained",
+                "evidence": [
+                    {"view": "matched", "bbox": [0, 0, 100, 200], "observation": "Blue"}
+                ],
+            }
+        ],
+        "findings": [],
+        "verdict": "passed",
+    }
+    assert _submit(record, receipt, record.path)["status"] == "accepted"
+    assert review.review_status(record, "first")["passed"]
+    record.meta_path.write_text(
+        '{"prompt": "Build a blue object", "prompt_image": "second.png"}'
+    )
+    assert not review.review_status(record, "first")["current"]
+
+
+def test_historical_review_count_requires_intact_frozen_packet(
+    reviewed_record, tmp_path
+):
+    record, _, _ = reviewed_record
+    packet, finished = _open_round(record)
+    assert _submit(record, finished, tmp_path)["status"] == "accepted"
+    assert review.review_status(record, "")["rounds"] == 1
+    (packet / "goal-top.png").unlink()
+    assert review.review_status(record, "")["rounds"] == 0
