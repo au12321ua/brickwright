@@ -23,12 +23,13 @@ from ..record import Record
 from ..tools.diagnostics import Diagnostic, exception_diagnostic
 from .contracts import Contracts, ModuleError, digest, json_bytes, read_contracts
 from .geometry import interface_points, match_endpoint, self_check
+from .motion import check_merged_motion, restore_motion
 from .records import (
     MODULE_DIR,
     CheckedSnapshot,
     atomic_write,
     selected_snapshot,
-    snapshot_mpd,
+    snapshot_artifacts,
 )
 
 if TYPE_CHECKING:
@@ -52,6 +53,7 @@ class FrozenMerge:
 
     manifest_bytes: bytes
     modules: tuple[tuple[str, bytes], ...]
+    motions: tuple[tuple[str, bytes | None], ...] = ()
 
     @property
     def manifest_sha256(self) -> str:
@@ -126,6 +128,7 @@ def _load(record: Record, contents: bytes) -> FrozenMerge:
             "The merge manifest does not select each declared module exactly once."
         )
     mpds = []
+    motions = []
     for selection in manifest.selections:
         module = selection.module_id
         if (
@@ -134,8 +137,10 @@ def _load(record: Record, contents: bytes) -> FrozenMerge:
         ):
             raise ModuleError(f"Contract digest mismatch for selected module {module}.")
         child = Record(record.path / MODULE_DIR / module)
-        mpds.append((module, snapshot_mpd(child, selection)))
-    return FrozenMerge(contents, tuple(mpds))
+        mpd, motion = snapshot_artifacts(child, selection)
+        mpds.append((module, mpd))
+        motions.append((module, motion))
+    return FrozenMerge(contents, tuple(mpds), tuple(motions))
 
 
 def merge_state(record: Record) -> tuple[bool, list[Diagnostic]]:
@@ -144,7 +149,13 @@ def merge_state(record: Record) -> tuple[bool, list[Diagnostic]]:
         contracts = read_contracts(record.path)
         if not contracts.modules and not (record.path / MERGE_FILENAME).exists():
             return True, []
-        if load_merge(record).manifest.contracts != contracts:
+        merge = load_merge(record)
+        if any(motion is None for _, motion in merge.motions):
+            raise ModuleError(
+                "This merge needs revalidated snapshots with motion attestation.",
+                code="module.articulation_unsupported",
+            )
+        if merge.manifest.contracts != contracts:
             raise ModuleError(
                 "The merge contract is obsolete. Prepare a new merge against the current plan."
             )
@@ -185,7 +196,11 @@ def place_module(build: LegoBuild, module_id: str) -> Placement:
     mpd = dict(merge.modules).get(module_id)
     if mpd is None or module_id in build.names:
         raise ModuleError(f"Expected exactly one placement of module {module_id}.")
-    return build.add_raw(_read_module(module_id, mpd), module.pose, name=module_id)
+    content = _read_module(module_id, mpd)
+    motion = dict(merge.motions).get(module_id)
+    if motion is not None:
+        content = restore_motion(content, motion)
+    return build.add_raw(content, module.pose, name=module_id)
 
 
 def module_owners(build: LegoBuild, merge: FrozenMerge) -> tuple[str | None, ...]:
@@ -286,6 +301,25 @@ def merge_evidence(
                     },
                 )
             )
+    motions = {module: data for module, data in merge.motions if data is not None}
+    unattested = [module for module, data in merge.motions if data is None]
+    if unattested:
+        diagnostics.append(
+            Diagnostic(
+                code="module.articulation_unsupported",
+                stage="module_merge",
+                message="The archived static module MPDs lack verified motion attestation.",
+                evidence={"modules": unattested},
+                next_action="Validate and finalize the affected modules before making a new merge.",
+            )
+        )
+    try:
+        motion_evidence = check_merged_motion(build, motions)
+    except ModuleError as exc:
+        diagnostics.append(exception_diagnostic(exc, "module_merge"))
+    else:
+        if motion_evidence is not None:
+            evidence.append({"motion": motion_evidence})
     return evidence, diagnostics
 
 

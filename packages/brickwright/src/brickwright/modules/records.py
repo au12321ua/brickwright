@@ -266,6 +266,10 @@ def selected_snapshot(child: Record, contract_bytes: bytes) -> CheckedSnapshot:
             source_sha256 = digest(snapshot.build_path.read_bytes())
         except (OSError, ValueError):
             continue
+        if not isinstance(report.get("module_motion"), dict):
+            raise ModuleError(
+                f"Module {child.id} needs a new validation and finalization to attest its declared motion.",
+            )
         if source_sha256 != meta.exported_source_sha256:
             raise ModuleError(
                 f"Source digest mismatch for module {child.id}, snapshot {snapshot.name}."
@@ -294,7 +298,9 @@ def _matches_report(
     )
 
 
-def snapshot_mpd(child: Record, selection: CheckedSnapshot) -> bytes:
+def snapshot_artifacts(
+    child: Record, selection: CheckedSnapshot
+) -> tuple[bytes, bytes | None]:
     snapshot = Snapshot(child.snapshots_dir / selection.snapshot_id)
     try:
         report_bytes = snapshot.report_path.read_bytes()
@@ -318,7 +324,8 @@ def snapshot_mpd(child: Record, selection: CheckedSnapshot) -> bytes:
         raise ModuleError(
             f"Snapshot digest or self-check mismatch for module {child.id}/{snapshot.name}."
         )
-    return mpd
+    motion = json.loads(report_bytes).get("module_motion")
+    return mpd, json_bytes(motion) if isinstance(motion, dict) else None
 
 
 def _session_path(child: Record, session_id: str) -> Path:

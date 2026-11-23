@@ -8,6 +8,7 @@ from bricklayer.io import from_ldraw, to_ldraw
 from brickwright.config import Config
 from brickwright.modules import (
     ModuleError,
+    capture_module_motion,
     check_module,
     init_module,
     load_merge,
@@ -114,6 +115,7 @@ def _seal(child, build):
                 "source_sha256": source_sha,
                 "module_contract_sha256": digest,
                 "module_mpd_sha256": sha256(mpd).hexdigest(),
+                "module_motion": capture_module_motion(build),
             }
         ),
     )
@@ -349,3 +351,69 @@ def test_pin_joint_mates_in_declared_space_and_reports_real_collision(tmp_path):
         and issue.evidence["modules"] == ["hole-side", None]
         for issue in diagnostics
     )
+
+
+def test_sealed_module_motion_survives_and_interference_blocks_both_checks(tmp_path):
+    config = Config(records_dir=tmp_path)
+    parent = Record.create(config)
+    plan = {
+        "modules": [
+            _module("machine", -100, 40, 0)
+            | {
+                "occupancy": {"min": [-100, -100, -100], "max": [100, 40, 100]},
+                "palette": [],
+            }
+        ]
+    }
+    _save_plan(parent, plan)
+    child = init_module(parent, "machine", config)
+    model = bl.LegoBuild()
+    base = model.add_raw(bl.Element("3680", bl.Color.WHITE))
+    top = model.connect(
+        bl.Element("3679", bl.Color.RED),
+        "turntable_pin",
+        to=base.find_connector("turntable_socket"),
+        motion=bl.MotionRange(bl.Revolute(0), bl.Revolute(180)),
+    )
+    model.stack(bl.plate(6, 1), on=top, rotation=bl.Rotation.DEG_90, name="arm")
+    assert model.check_motion().passed
+    _seal(child, model)
+    merge = prepare_merge(parent)
+    assert merge is not None
+    parent_build = bl.LegoBuild()
+    with merge_context(merge):
+        place_module(parent_build, "machine")
+    assert len(parent_build.flattened_joints) == 1
+    assert parent_build.flattened_joints[0].motion == model.flattened_joints[0].motion
+    clean = from_ldraw(to_ldraw(parent_build))
+    assert not clean.flattened_joints
+    motion, diagnostics = merge_evidence(clean, merge)
+    assert diagnostics == []
+    assert motion == [{"motion": {"modules": ["machine"], "samples_checked": 5}}]
+
+    middle = model.posed({model.joint(top): bl.Revolute(90)})
+    obstacle = middle.named("arm").to_world(bl.Position(2.5, 0, 0))
+    parent_build.add_raw(bl.brick(1, 1), bl.Pose(translation=obstacle))
+    assert not parent_build.colliding_placements
+    for build in (parent_build, from_ldraw(to_ldraw(parent_build))):
+        _, diagnostics = merge_evidence(build, merge)
+        issue = next(
+            item for item in diagnostics if item.code == "module.motion_failed"
+        )
+        collisions = issue.evidence["collisions"]
+        assert isinstance(collisions, int) and collisions > 0
+
+
+def test_legacy_seal_can_replay_mpd_but_requires_new_motion_attestation(assembly):
+    config, parent, plan = assembly
+    plan["modules"] = [plan["modules"][0]]
+    plan["interfaces"] = []
+    plan["modules"][0]["occupancy"]["min"][1] = -16
+    _save_plan(parent, plan)
+    child = init_module(parent, "lower", config)
+    snapshot = _seal(child, _plate())
+    report = json.loads(snapshot.report_path.read_bytes())
+    del report["module_motion"]
+    snapshot.report_path.write_text(json.dumps(report))
+    with pytest.raises(ModuleError, match="motion"):
+        prepare_merge(parent)
