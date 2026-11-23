@@ -8,6 +8,7 @@ import sys
 from collections.abc import Generator
 from contextlib import ExitStack, contextmanager
 from pathlib import Path
+from time import monotonic, sleep
 from typing import Any
 from unittest.mock import patch
 
@@ -28,19 +29,32 @@ def _bound_responses(api_base: str, key_file: Path) -> Generator[None]:
         raise ValueError("evaluation key file must contain a single bearer token")
     destination = httpx.URL(f"{api_base}/responses")
     original = litellm.completion
+    retry_delay: float | None = None
+    quota_exhausted = False
 
     def enforce_destination(request: httpx.Request) -> None:
         if request.url != destination or request.method != "POST":
             raise RuntimeError("evaluation request moved outside its bound endpoint")
 
+    def observe_rate_limit(response: httpx.Response) -> None:
+        nonlocal retry_delay, quota_exhausted
+        if response.status_code == 429:
+            delay = response.headers.get("Retry-After", "")
+            retry_delay = float(delay) if delay.isdecimal() else None
+            quota_exhausted = _quota_exhausted(response.read().decode(errors="replace"))
+
     with httpx.Client(
         follow_redirects=False,
         trust_env=False,
-        event_hooks={"request": [enforce_destination]},
+        event_hooks={
+            "request": [enforce_destination],
+            "response": [observe_rate_limit],
+        },
     ) as client:
         handler = HTTPHandler(client=client, follow_redirects=False)
 
         def complete(*positional: Any, **kwargs: Any) -> Any:
+            nonlocal retry_delay, quota_exhausted
             if not (kwargs.get("model") or "").startswith("openai/responses/"):
                 raise RuntimeError(
                     "evaluation must use the native OpenAI Responses route"
@@ -52,21 +66,38 @@ def _bound_responses(api_base: str, key_file: Path) -> Generator[None]:
                 *(kwargs.get("allowed_openai_params") or ()),
                 "tool_choice",
             ]
-            try:
-                return original(
-                    *positional,
-                    **kwargs,
-                    client=handler,
-                    api_key=key,
-                    api_base=api_base,
-                    _skip_mcp_handler=True,
-                )
-            except (openai.APIError, httpx.HTTPError, ValueError) as error:
-                status = getattr(error, "status_code", None)
-                detail = f" ({status})" if isinstance(status, int) else ""
-                raise RuntimeError(
-                    f"Bound Responses request failed: {type(error).__name__}{detail}"
-                ) from None
+            deadline = monotonic() + float(kwargs.pop("timeout", None) or 120)
+            for backoff in (5, 15, 30, None):
+                retry_delay, quota_exhausted = None, False
+                try:
+                    return original(
+                        *positional,
+                        **kwargs,
+                        client=handler,
+                        api_key=key,
+                        api_base=api_base,
+                        _skip_mcp_handler=True,
+                        timeout=max(0.001, deadline - monotonic()),
+                    )
+                except (openai.APIError, httpx.HTTPError, ValueError) as error:
+                    status = getattr(error, "status_code", None)
+                    if status == 429 and backoff is not None and not quota_exhausted:
+                        delay = (
+                            retry_delay if retry_delay is not None else float(backoff)
+                        )
+                        if delay < deadline - monotonic():
+                            print(
+                                f"Bound Responses route limited; retry in {delay:g}s.",
+                                flush=True,
+                            )
+                            sleep(delay)
+                            continue
+                    detail = f" ({status})" if isinstance(status, int) else ""
+                    reason = " (quota exhausted)" if quota_exhausted else ""
+                    raise RuntimeError(
+                        f"Bound Responses request failed: {type(error).__name__}{detail}{reason}"
+                    ) from None
+            raise AssertionError("the final bound Responses attempt must terminate")
 
         def dispatch_mcp(*, tools: Any, **kwargs: Any) -> None:
             # The pinned bridge imports its optional MCP gateway even for
@@ -83,6 +114,21 @@ def _bound_responses(api_base: str, key_file: Path) -> Generator[None]:
             ),
         ):
             yield
+
+
+def _quota_exhausted(body: str) -> bool:
+    body = body.casefold()
+    return any(
+        clue in body
+        for clue in (
+            "insufficient_quota",
+            "quota_exceeded",
+            "insufficient balance",
+            "balance exhausted",
+            "余额不足",
+            "额度不足",
+        )
+    )
 
 
 def run(response_log: Path, *, unpriced: bool = False) -> None:

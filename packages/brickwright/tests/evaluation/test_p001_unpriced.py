@@ -106,6 +106,8 @@ def test_bound_openai_transport_attaches_only_the_named_key_and_disallows_redire
     original_client = httpx.Client
     original_completion = litellm.completion
     urls = []
+    delays = []
+    monkeypatch.setattr(p001_native, "sleep", delays.append, raising=False)
 
     def client(**kwargs):
         assert kwargs["trust_env"] is False
@@ -117,6 +119,12 @@ def test_bound_openai_transport_attaches_only_the_named_key_and_disallows_redire
             request_data = json.loads(request.content)
             assert request_data["reasoning"]["effort"] == "medium"
             assert request_data["tools"][0]["name"] == "recheck_build"
+            if len(urls) == 1:
+                return httpx.Response(
+                    429,
+                    headers={"Retry-After": "2"},
+                    json={"error": {"type": "rate_limit_exceeded"}},
+                )
             return httpx.Response(
                 307, headers={"Location": "https://other.example/redirect"}
             )
@@ -131,6 +139,7 @@ def test_bound_openai_transport_attaches_only_the_named_key_and_disallows_redire
         litellm_complete()(
             model="openai/gpt-6.2-sol",
             reasoning_effort="medium",
+            timeout=120,
             messages=[{"role": "user", "content": "Test."}],
             tools=[
                 {
@@ -143,5 +152,6 @@ def test_bound_openai_transport_attaches_only_the_named_key_and_disallows_redire
             ],
             tool_choice="auto",
         )
-    assert urls == [f"{endpoint}/responses"]
+    assert urls == [f"{endpoint}/responses"] * 2
+    assert delays == [2.0]
     assert litellm.completion is original_completion
