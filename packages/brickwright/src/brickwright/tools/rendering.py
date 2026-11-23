@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import io
 import json
-from collections.abc import Callable
-from contextlib import redirect_stdout
+from collections.abc import Callable, Generator
+from contextlib import contextmanager, redirect_stdout
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -36,6 +37,8 @@ from .software_rendering import (
 
 if TYPE_CHECKING:
     from bricklayer import LegoBuild
+
+    from ..modules import FrozenMerge
 
 # The heavy render stack (pygfx, rendercanvas, PIL, ldraw2mesh) loads inside the
 # functions that use it: each child process re-imports this module.
@@ -174,8 +177,21 @@ def _in_subprocess(
 ) -> RenderReport:
     """Run a render body in a child process under the render timeout."""
     config = config or Config()
+    from ..modules import ModuleError, load_merge
+
     try:
         source = record.read_build()
+        merge = (
+            load_merge(record)
+            if (record.path / "merge-manifest.json").is_file()
+            else None
+        )
+    except ModuleError as exc:
+        return RenderReport(
+            ok=False,
+            error=str(exc),
+            diagnostics=[exception_diagnostic(exc, "module_merge")],
+        )
     except (OSError, UnicodeError) as exc:
         return RenderReport(
             ok=False,
@@ -184,7 +200,7 @@ def _in_subprocess(
         )
     return build_execution.run_guarded(
         _reported,
-        (fn, record, source, *args),
+        (fn, record, source, merge, *args),
         config.render_timeout,
         lambda e: RenderReport(
             ok=False,
@@ -199,13 +215,19 @@ def _in_subprocess(
 
 
 def _reported(
-    fn: Callable[..., Path], record: Record, source: str, *args: Any
+    fn: Callable[..., Path],
+    record: Record,
+    source: str,
+    merge: FrozenMerge | None,
+    *args: Any,
 ) -> RenderReport:
     """Run a render body, reporting the phase that failed and its traceback."""
+    from ..modules import merge_context
+
     filename = str(record.build_path)
     stage = "load_build"
     try:
-        with redirect_stdout(io.StringIO()):
+        with merge_context(merge), redirect_stdout(io.StringIO()):
             module = build_execution.load_build_module(filename, source)
             stage = "create_build"
             build = module.create_build()
@@ -226,13 +248,32 @@ def _reported(
         )
 
 
+@contextmanager
+def _preview_mesh(record: Record, build: LegoBuild) -> Generator[Path]:
+    """Keep preliminary LDraw and mesh files out of the flow delivery directory."""
+    if record.read_meta().flow is None:
+        yield build_mesh(record, build)
+        return
+    from bricklayer import write_ldraw
+
+    with TemporaryDirectory() as temporary:
+        directory = Path(temporary)
+        ldraw = directory / "preview.ldr"
+        mesh = directory / "preview.glb"
+        write_ldraw(build, ldraw)
+        _convert(ldraw, mesh)
+        yield mesh
+
+
 def _render(record: Record, build: LegoBuild) -> Path:
-    mesh2png(build_mesh(record, build), record.render_path)
+    with _preview_mesh(record, build) as mesh:
+        mesh2png(mesh, record.render_path)
     return record.render_path
 
 
 def _render_views(record: Record, build: LegoBuild) -> Path:
-    views = _view_arrays(build_mesh(record, build))
+    with _preview_mesh(record, build) as mesh:
+        views = _view_arrays(mesh)
     for (_, view_path), tile in zip(record.render_views(), views):
         _save_png(tile, view_path)
     _save_png(tile_images(views), record.render_path)
@@ -242,11 +283,10 @@ def _render_views(record: Record, build: LegoBuild) -> Path:
 def _render_angle(
     record: Record, build: LegoBuild, azimuth: float, elevation: float, out_path: Path
 ) -> Path:
-    tile = _angle_array(
-        build_mesh(record, build),
-        angle_to_view_dir(azimuth, elevation),
-        angle_up(elevation),
-    )
+    with _preview_mesh(record, build) as mesh:
+        tile = _angle_array(
+            mesh, angle_to_view_dir(azimuth, elevation), angle_up(elevation)
+        )
     out_path.parent.mkdir(parents=True, exist_ok=True)
     _save_png(tile, out_path)
     return out_path

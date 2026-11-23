@@ -32,6 +32,12 @@ brickwright external init <text_prompt>
 
 where `<text_prompt>` is the prompt provided by the user (or a summary thereof).
 
+For a task that enables the build flow, run `brickwright external instructions --flow` and
+pass `--flow --task-json PATH --review-rounds 2` at initialization. The flow commands
+store the checklist, plan, module snapshots, two structure checks and independent
+image reviews with the record. Read `brickwright external status <record_id>` after
+an edit to see the current release conditions.
+
 Options:
 
 - `--model <id>` / `--effort none|minimal|low|medium|high|xhigh|max`—recorded in metadata. If you know your model (e.g.

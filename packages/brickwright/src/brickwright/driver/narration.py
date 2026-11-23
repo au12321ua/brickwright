@@ -71,6 +71,12 @@ class Narrator:
 
 # Per-tool display label and accent color, keyed by tool name.
 _TOOL_LOOK: dict[str, tuple[str, str]] = {
+    "read_features": ("read features", "blue"),
+    "read_plan": ("read plan", "blue"),
+    "set_features": ("set features", "magenta"),
+    "set_plan": ("set plan", "magenta"),
+    "request_aligned_review": ("review images", "cyan"),
+    "freeze_modules": ("freeze modules", "yellow"),
     "read_build": ("read", "blue"),
     "write_build": ("write", "magenta"),
     "edit_build": ("edit", "magenta"),

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import ast
 import io
-from contextlib import redirect_stdout
+from contextlib import nullcontext, redirect_stdout
 from hashlib import sha256
 from pathlib import Path
 
@@ -66,7 +66,15 @@ def _explore(build_path: str, code: str) -> SnippetResult:
     digest = sha256(source.encode()).hexdigest()
     stage = "load_build"
     try:
-        with redirect_stdout(io.StringIO()):
+        from ..modules import load_merge, merge_context
+
+        record = Record(Path(build_path).parent)
+        context = (
+            merge_context(load_merge(record))
+            if (record.path / "merge-manifest.json").is_file()
+            else nullcontext()
+        )
+        with context, redirect_stdout(io.StringIO()):
             module = build_execution.load_build_module(build_path, source)
             stage = "create_build"
             build = module.create_build()

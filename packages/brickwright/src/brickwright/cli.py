@@ -5,12 +5,13 @@ holds the operations an external agent (e.g. Claude Code pointed at the
 package) drives to iterate on a build.
 """
 
+import json
 import time
 from collections.abc import Generator
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any, Literal
 
 import typer
 from rich.console import Console
@@ -68,6 +69,37 @@ RecordsDir = Annotated[
 Prompt = Annotated[str | None, typer.Argument(help="text prompt")]
 RecordId = Annotated[str, typer.Argument(help="record id")]
 Image = Annotated[Path | None, typer.Option(help="image prompt")]
+
+Flow = Annotated[
+    bool,
+    typer.Option(
+        "--flow/--no-flow",
+        envvar="BRICKWRIGHT_FLOW",
+        help="use the frozen build and review workflow",
+    ),
+]
+TaskJSON = Annotated[
+    Path | None,
+    typer.Option(
+        "--task-json",
+        envvar="BRICKWRIGHT_TASK_JSON",
+        help="original task with its ordered checks",
+    ),
+]
+ReviewRounds = Annotated[
+    int,
+    typer.Option(
+        "--review-rounds", min=0, help="valid independent review rounds in this flow"
+    ),
+]
+SetFile = Annotated[
+    Path | None, typer.Option("--set", help="read a JSON artifact from this file")
+]
+module_app = typer.Typer(
+    help="Build and freeze the modules in a record's plan.", no_args_is_help=True
+)
+external_app.add_typer(module_app, name="module")
+
 
 # Defaults for the Config-backed options, so Typer can display them in --help.
 _DEFAULTS = Config()
@@ -202,10 +234,15 @@ def generate(
     viewpoint_model: ViewpointModel = _DEFAULTS.viewpoint_model,
     viewpoint_effort: ViewpointEffort = _DEFAULTS.viewpoint_effort,
     from_id: FromId = None,
+    flow: Flow = False,
+    task_json: TaskJSON = None,
+    review_rounds: ReviewRounds = 2,
 ) -> None:
     """Generate a new LEGO build record from a text or image prompt."""
     config = Config(
         records_dir=records_dir,
+        flow=flow,
+        flow_review_rounds=review_rounds,
         model=model,
         effort=effort,
         max_validations=max_validations,
@@ -226,7 +263,9 @@ def generate(
         viewpoint_model=viewpoint_model,
         viewpoint_effort=viewpoint_effort,
     )
-    rec = _create_record(config, prompt=prompt, image=image, from_id=from_id)
+    rec = _create_record(
+        config, prompt=prompt, image=image, from_id=from_id, task_json=task_json
+    )
     if not run_agent(rec, config).succeeded:
         raise typer.Exit(1)
 
@@ -272,6 +311,9 @@ def init(
     model: Model = None,
     effort: Effort_ = None,
     from_id: FromId = None,
+    flow: Flow = False,
+    task_json: TaskJSON = None,
+    review_rounds: ReviewRounds = 2,
 ) -> None:
     """Initialize a new record.
 
@@ -279,17 +321,28 @@ def init(
     An external agent should edit the build.py file directly, then run
     ``brickwright external validate <record_id>`` to validate it.
     """
-    config = Config(records_dir=records_dir, model=model, effort=effort)
+    config = Config(
+        records_dir=records_dir,
+        model=model,
+        effort=effort,
+        flow=flow,
+        flow_review_rounds=review_rounds,
+    )
     rec = _create_record(
-        config, prompt=prompt, image=image, from_id=from_id, external=True
+        config,
+        prompt=prompt,
+        image=image,
+        from_id=from_id,
+        task_json=task_json,
+        external=True,
     )
     print(f"record_id={rec.id}")
     print(f"build_path={rec.build_path.absolute()}")
 
 
 @external_app.command()
-def instructions() -> None:
-    print(system_prompt(external=True))
+def instructions(flow: Flow = False) -> None:
+    print(system_prompt(external=True, config=Config(flow=flow)))
 
 
 @external_app.command()
@@ -381,6 +434,9 @@ def render(
     record_id: RecordId,
     records_dir: RecordsDir = Path(DEFAULT_RECORDS_DIR),
     timeout: RenderTimeout = _DEFAULTS.render_timeout,
+    cameras: Annotated[
+        Path | None, typer.Option(help="render the frozen MPD at these task cameras")
+    ] = None,
 ) -> None:
     """Render a record's current build to a multi-view image.
 
@@ -390,6 +446,12 @@ def render(
     config = Config(records_dir=records_dir, render_timeout=timeout)
     rec = Record.load(config, record_id)
 
+    if cameras is not None:
+        from .aligned_review import render_cameras
+
+        with _flow_errors(), _track_command(rec, "render"):
+            _print_json(render_cameras(rec, cameras, config))
+        return
     with _track_command(rec, "render"):
         report = render_record(rec, config)
     _print_image_and_report(report)
@@ -438,6 +500,217 @@ def critique_instructions(
         raise typer.Exit(1) from exc
 
 
+@contextmanager
+def _flow_errors() -> Generator[None]:
+    """Return machine-readable input errors to the external agent."""
+    from bricklayer.diagnostics import DiagnosticError
+
+    from .tools.diagnostics import exception_diagnostic
+
+    try:
+        yield
+    except (ValueError, OSError, RuntimeError, DiagnosticError) as exc:
+        issue = exception_diagnostic(exc, "flow", code="flow.invalid_input")
+        print(
+            json.dumps(
+                {"error": str(exc), "diagnostics": [issue.model_dump(mode="json")]},
+                ensure_ascii=False,
+            )
+        )
+        raise typer.Exit(1) from exc
+
+
+def _print_json(result: dict[str, Any]) -> None:
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+
+
+def _record(record_id: str, records_dir: Path) -> Record:
+    return Record.load(Config(records_dir=records_dir), record_id)
+
+
+def _artifact(
+    record_id: str,
+    records_dir: Path,
+    name: Literal["features", "plan", "review"],
+    path: Path | None,
+) -> None:
+    from .aligned_review import submit_review
+    from .flow import read_artifact, set_artifact
+
+    with _flow_errors():
+        record = _record(record_id, records_dir)
+        if path is None:
+            result = read_artifact(record, name)
+        elif name == "review":
+            result = submit_review(record, path)
+        else:
+            try:
+                data = json.loads(path.read_bytes())
+            except (ValueError, UnicodeError) as exc:
+                raise ValueError(f"Invalid JSON in {path}: {exc}") from exc
+            if not isinstance(data, dict):
+                raise ValueError("Expected a JSON object.")
+            result = set_artifact(record, name, data)
+        _print_json(result)
+        if result.get("diagnostics") or result.get("ok") is False:
+            raise typer.Exit(1)
+
+
+@external_app.command()
+def features(
+    record_id: RecordId,
+    records_dir: RecordsDir = Path(DEFAULT_RECORDS_DIR),
+    set_file: SetFile = None,
+) -> None:
+    """Read the feature schema and current checklist, or submit a new checklist."""
+    _artifact(record_id, records_dir, "features", set_file)
+
+
+@external_app.command()
+def plan(
+    record_id: RecordId,
+    records_dir: RecordsDir = Path(DEFAULT_RECORDS_DIR),
+    set_file: SetFile = None,
+) -> None:
+    """Read the plan schema and current plan, or submit a new plan."""
+    _artifact(record_id, records_dir, "plan", set_file)
+
+
+@external_app.command()
+def review(
+    record_id: RecordId,
+    records_dir: RecordsDir = Path(DEFAULT_RECORDS_DIR),
+    set_file: SetFile = None,
+) -> None:
+    """Inspect the current review, or submit the independent session's report."""
+    _artifact(record_id, records_dir, "review", set_file)
+
+
+@external_app.command()
+def status(
+    record_id: RecordId, records_dir: RecordsDir = Path(DEFAULT_RECORDS_DIR)
+) -> None:
+    """Show current snapshot, release gates and next actions."""
+    from .flow import flow_status
+
+    with _flow_errors():
+        _print_json(flow_status(_record(record_id, records_dir)))
+
+
+@external_app.command()
+def compare(
+    record_id: RecordId,
+    reference_dir: Annotated[Path, typer.Option()],
+    records_dir: RecordsDir = Path(DEFAULT_RECORDS_DIR),
+) -> None:
+    """Compare each fixed-camera view against the same named reference image."""
+    from .aligned_review import compare_record
+
+    with _flow_errors():
+        _print_json(compare_record(_record(record_id, records_dir), reference_dir))
+
+
+@external_app.command(name="review-instructions")
+def aligned_instructions(
+    record_id: RecordId,
+    records_dir: RecordsDir = Path(DEFAULT_RECORDS_DIR),
+    parent_session_id: Annotated[str | None, typer.Option()] = None,
+    azimuth: Annotated[
+        float | None, typer.Option(help="externally matched horizontal angle")
+    ] = None,
+    elevation: Annotated[
+        float | None, typer.Option(help="externally matched vertical angle")
+    ] = None,
+) -> None:
+    """Freeze the inputs and print the task for a fresh image review session."""
+    from .aligned_review import review_instructions
+
+    with _flow_errors():
+        if (azimuth is None) != (elevation is None):
+            raise ValueError("Pass both --azimuth and --elevation for a matched view.")
+        record = _record(record_id, records_dir)
+        if azimuth is None or elevation is None:
+            print(review_instructions(record, parent_session_id=parent_session_id))
+        else:
+            print(
+                review_instructions(
+                    record,
+                    parent_session_id=parent_session_id,
+                    matched_angle=(azimuth, elevation),
+                )
+            )
+
+
+@module_app.command(name="init")
+def module_init(
+    record_id: RecordId,
+    module_id: str,
+    records_dir: RecordsDir = Path(DEFAULT_RECORDS_DIR),
+) -> None:
+    """Create a child record in the parent's module coordinate system."""
+    from .modules import init_module
+
+    with _flow_errors():
+        child = init_module(
+            _record(record_id, records_dir), module_id, Config(records_dir=records_dir)
+        )
+        print(f"record_id={child.path.relative_to(records_dir)}")
+        print(f"build_path={child.build_path.absolute()}")
+
+
+@module_app.command(name="status")
+def module_status_command(
+    record_id: RecordId, records_dir: RecordsDir = Path(DEFAULT_RECORDS_DIR)
+) -> None:
+    """List child records, interface checks and stale contracts."""
+    from .modules import module_status
+
+    with _flow_errors():
+        _print_json(module_status(_record(record_id, records_dir)))
+
+
+@module_app.command(name="instructions")
+def module_instruction_command(
+    record_id: RecordId,
+    records_dir: RecordsDir = Path(DEFAULT_RECORDS_DIR),
+    session_id: Annotated[str | None, typer.Option()] = None,
+) -> None:
+    """Show the module contract and record a builder session when supplied."""
+    from .modules import module_instructions
+
+    with _flow_errors():
+        print(
+            module_instructions(_record(record_id, records_dir), session_id=session_id)
+        )
+
+
+@module_app.command(name="finish")
+def module_finish(
+    record_id: RecordId,
+    session_id: Annotated[str, typer.Option()],
+    records_dir: RecordsDir = Path(DEFAULT_RECORDS_DIR),
+) -> None:
+    """Record the end of the independent module session."""
+    from .modules import finish_module_session
+
+    with _flow_errors():
+        _print_json(finish_module_session(_record(record_id, records_dir), session_id))
+
+
+@module_app.command(name="merge")
+def module_merge(
+    record_id: RecordId, records_dir: RecordsDir = Path(DEFAULT_RECORDS_DIR)
+) -> None:
+    """Select and freeze all checked module snapshots for the parent."""
+    from .modules import prepare_merge
+
+    with _flow_errors():
+        merge = prepare_merge(_record(record_id, records_dir))
+        if merge is None:
+            raise ValueError("The plan contains no modules.")
+        _print_json({"manifest_sha256": merge.manifest_sha256})
+
+
 def _create_record(
     config: Config,
     *,
@@ -445,12 +718,19 @@ def _create_record(
     image: Path | None,
     from_id: str | None,
     external: bool = False,
+    task_json: Path | None = None,
 ) -> Record:
     if not prompt and image is None and from_id is None:
         raise typer.BadParameter("provide a prompt, --image, or --from")
-    return Record.create(
-        config, prompt=prompt or "", image=image, from_id=from_id, external=external
-    )
+    with _flow_errors():
+        return Record.create(
+            config,
+            prompt=prompt or "",
+            image=image,
+            from_id=from_id,
+            external=external,
+            task_path=task_json,
+        )
 
 
 @contextmanager
@@ -485,7 +765,10 @@ def _print_report(
     report: ValidationReport | FinalizationReport | RenderReport | SnippetResult,
 ) -> None:
     """Print the report as JSON and exit nonzero if the operation failed."""
-    print(report.model_dump_json(indent=2))
+    if isinstance(report, (ValidationReport, FinalizationReport)):
+        print(report.agent_json(indent=2))
+    else:
+        print(report.model_dump_json(indent=2))
     if not report.ok:
         raise typer.Exit(1)
 

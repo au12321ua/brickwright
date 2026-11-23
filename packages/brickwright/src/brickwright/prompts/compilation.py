@@ -32,6 +32,8 @@ def system_prompt(config: Config | None = None, *, external: bool = False) -> st
         parts.append(internal)
         if is_subagent:
             parts.append(_get_prompt("internal_subagent_instructions"))
+    if config is not None and config.flow and not is_subagent:
+        parts.append(_get_prompt("external_flow" if external else "internal_flow"))
     parts.append(api_reference())
     return "\n".join(parts)
 

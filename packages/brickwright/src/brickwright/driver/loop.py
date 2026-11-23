@@ -211,9 +211,14 @@ def _run_tool_calls(run: _Run, tool_calls: list[Any]) -> None:
             continue
 
         name = tc.function.name
-        if name == "dispatch_subagents" and run.tracker.has_unknown_cost():
+        if name in {"dispatch_subagents", "request_aligned_review"} and (
+            run.tracker.has_unknown_cost() or run.tracker.cost() >= run.config.max_cost
+        ):
             run.transcript.append(
-                tool_call_message(tc, "skipped: cost is unknown; no further paid calls")
+                tool_call_message(
+                    tc,
+                    "skipped: cost is unknown or the budget is exhausted; no further paid calls",
+                )
             )
             continue
         if name == "validate" and not run.tracker.validation_budget_left(
@@ -266,7 +271,7 @@ def _run_critique_loop(run: _Run) -> CritiqueResult | None:
     no image to compare against.
     """
     config = run.config
-    if config.max_critique_rounds <= 0:
+    if run.record.read_meta().flow or config.max_critique_rounds <= 0:
         return None
     if run.record.prompt_image_path is None:
         run.narrator.critique_skipped("no prompt image to compare against")
