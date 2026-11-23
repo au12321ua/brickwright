@@ -12,6 +12,7 @@ from hashlib import sha256
 from math import isclose, isfinite
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 ARMS = ("old", "new")
 EFFORTS = ("none", "minimal", "low", "medium", "high", "xhigh", "max")
@@ -141,10 +142,11 @@ def make_plan(
     repetitions: int,
     max_turns: int,
     max_validations: int,
-    max_cost: float,
+    max_cost: float | None,
     build_timeout: float,
     render_timeout: float,
     request_timeout: float,
+    trial_timeout: float | None = None,
 ) -> dict[str, Any]:
     if not model.strip():
         raise ValueError("model must be explicit")
@@ -154,15 +156,23 @@ def make_plan(
         ("repetitions", repetitions),
         ("max_turns", max_turns),
         ("max_validations", max_validations),
-        ("max_cost", max_cost),
         ("build_timeout", build_timeout),
         ("render_timeout", render_timeout),
         ("request_timeout", request_timeout),
     ):
         if not isfinite(value) or value <= 0:
             raise ValueError(f"{name} must be finite and positive")
+    if max_cost is not None and (not isfinite(max_cost) or max_cost <= 0):
+        raise ValueError("max_cost must be finite and positive")
+    if max_cost is None and trial_timeout is None:
+        raise ValueError("unpriced evaluation requires a fixed trial_timeout")
+    if trial_timeout is not None and (
+        not isfinite(trial_timeout) or trial_timeout <= 0
+    ):
+        raise ValueError("trial_timeout must be finite and positive")
     return {
         "protocol": "P-001/U-05/v1",
+        **({"trial_timeout": trial_timeout} if trial_timeout is not None else {}),
         "repetitions": repetitions,
         "settings": {
             "model": model,
@@ -226,8 +236,34 @@ def load_plan(output: Path) -> dict[str, Any]:
     return json_data(plan_path)
 
 
+@dataclass(frozen=True)
+class Provider:
+    """An explicit OpenAI Responses endpoint, paired with its key file."""
+
+    api_base: str
+    key_file: Path
+
+    def __post_init__(self) -> None:
+        url = urlsplit(self.api_base)
+        if (
+            url.scheme != "https"
+            or not url.hostname
+            or url.username is not None
+            or url.password is not None
+            or url.query
+            or url.fragment
+        ):
+            raise ValueError("evaluation provider must be an HTTPS base URL")
+        if not self.key_file.is_file():
+            raise ValueError("evaluation key file does not exist")
+
+
 def generate_command(
-    directory: Path, checkout: Path, plan: dict[str, Any], task: dict[str, str]
+    directory: Path,
+    checkout: Path,
+    plan: dict[str, Any],
+    task: dict[str, str],
+    provider: Provider | None = None,
 ) -> list[str]:
     settings = plan["settings"]
     command = [
@@ -235,13 +271,25 @@ def generate_command(
         "-I",
         str(Path(__file__).with_name("p001_native.py").resolve()),
         str(directory / "responses.jsonl"),
-        "generate",
-        "--records-dir",
-        str(directory / "records"),
     ]
+    if settings["max_cost"] is None:
+        command.append("--unpriced")
+    if provider is not None:
+        command.extend(
+            ("--api-base", provider.api_base, "--api-key-file", str(provider.key_file))
+        )
+    command.extend(
+        (
+            "generate",
+            "--records-dir",
+            str(directory / "records"),
+        )
+    )
     for name, value in settings.items():
         if name not in DISABLED:
-            command.extend((f"--{name.replace('_', '-')}", str(value)))
+            command.extend(
+                (f"--{name.replace('_', '-')}", "inf" if value is None else str(value))
+            )
     return command + [
         "--no-use-subagents",
         "--critique-rounds",
@@ -317,25 +365,44 @@ def _arm_path(output: Path, arm: str) -> Path:
     return output / "private" / f"{arm}.json"
 
 
-def _bind_arm(output: Path, arm: str, checkout: Path, plan: dict[str, Any]) -> dict:
+def _bind_arm(
+    output: Path,
+    arm: str,
+    checkout: Path,
+    plan: dict[str, Any],
+    provider: Provider | None = None,
+) -> dict:
     checkout = checkout.resolve()
     commit = checkout_commit(checkout)
     python = checkout / ".venv" / "bin" / "python"
     if not python.is_file():
         raise ValueError(f"run uv sync --locked in {checkout} first")
+    probe_settings = dict(plan["settings"])
+    if probe_settings["max_cost"] is None:
+        del probe_settings["max_cost"]
     probe = subprocess.check_output(
-        [str(python), "-I", "-c", _PROBE, json.dumps(plan["settings"])],
+        [str(python), "-I", "-c", _PROBE, json.dumps(probe_settings)],
         cwd=checkout,
         text=True,
+        env=_provider_env(provider),
     )
     runtime = json.loads(probe)
     if runtime["ldraw_library"]:
         colors = Path(runtime["ldraw_library"]) / "LDConfig.ldr"
         runtime["ldraw_colors_sha256"] = digest(colors) if colors.is_file() else None
+    if provider is not None:
+        if not runtime["request"]["model"].startswith("openai/responses/"):
+            raise ValueError(
+                "explicit evaluation provider requires the native OpenAI Responses route"
+            )
+        runtime["provider"] = {
+            "api_base": provider.api_base,
+            "key_file": str(provider.key_file),
+        }
     runtime["provider_settings_sha256"] = sha256(
         json.dumps(
             {
-                name: os.environ.get(name)
+                name: (_provider_env(provider) or os.environ).get(name)
                 for name in (
                     "OPENAI_API_BASE",
                     "OPENAI_BASE_URL",
@@ -367,11 +434,25 @@ def _bind_arm(output: Path, arm: str, checkout: Path, plan: dict[str, Any]) -> d
     return bound
 
 
+def _provider_env(provider: Provider | None) -> dict[str, str] | None:
+    if provider is None:
+        return None
+    # Tool subprocesses need the parts library and local executables. The
+    # named key is read inside the request wrapper and never added to their environment.
+    allowed = ("HOME", "PATH", "LANG", "LC_ALL", "TERM", "TMPDIR", "LDRAW_LIBRARY_PATH")
+    return {name: os.environ[name] for name in allowed if name in os.environ} | {
+        "LITELLM_LOCAL_MODEL_COST_MAP": "True",
+    }
+
+
 TOKEN_FIELDS = ("prompt_tokens", "completion_tokens", "total_tokens")
 
 
 def usage_problem(
-    metadata: dict[str, Any] | None, responses: list[dict[str, Any]] | None = None
+    metadata: dict[str, Any] | None,
+    responses: list[dict[str, Any]] | None = None,
+    *,
+    allow_unpriced: bool = False,
 ) -> str | None:
     if metadata is None:
         return "native generator produced no record"
@@ -380,7 +461,10 @@ def usage_problem(
     if not isinstance(tokens, int) or tokens <= 0:
         return "no model response with token usage was recorded"
     cost = usage.get("cost_usd")
-    if not isinstance(cost, (float, int)) or not isfinite(cost) or cost <= 0:
+    if allow_unpriced:
+        if cost is not None:
+            return "unpriced evaluation reported a dollar total"
+    elif not isinstance(cost, (float, int)) or not isfinite(cost) or cost <= 0:
         return "spend budget could not be verified from model usage and pricing"
     if responses is not None:
         breakdown = [response["usage"] for response in responses]
@@ -391,18 +475,23 @@ def usage_problem(
             return "responding model could not be verified"
         if len(models) != 1:
             return "the provider returned different model versions during the run"
-        if any(
-            row["total_tokens"] <= 0
-            or row["cost_usd"] is None
-            or not isfinite(row["cost_usd"])
-            or row["cost_usd"] <= 0
-            for row in breakdown
-        ):
-            return "spend budget could not be verified for every model response"
+        if any(row["total_tokens"] <= 0 for row in breakdown):
+            return "a model response did not report token usage"
+        if allow_unpriced:
+            if any(row["cost_usd"] is not None for row in breakdown):
+                return "unpriced evaluation reported a response dollar cost"
+        else:
+            costs = [row["cost_usd"] for row in breakdown]
+            if any(
+                value is None or not isfinite(value) or value <= 0 for value in costs
+            ):
+                return "spend budget could not be verified for every model response"
+            if cost is None or not isclose(sum(costs), cost):
+                return "native usage totals differ from the response log"
         if any(
             sum(row[field] for row in breakdown) != usage.get(field)
             for field in TOKEN_FIELDS
-        ) or not isclose(sum(row["cost_usd"] for row in breakdown), cost):
+        ):
             return "native usage totals differ from the response log"
     if metadata.get("stop_reason") == "error":
         return "native driver error after a model response"
@@ -420,7 +509,11 @@ def budget_problem(
     if not 0 <= metadata.get("validations", -1) <= settings["max_validations"]:
         return "native validation count exceeds the frozen budget or is missing"
     # Each response's price is known only after its call returns.
-    if sum(row["usage"]["cost_usd"] for row in responses[:-1]) >= settings["max_cost"]:
+    cap = settings["max_cost"]
+    if (
+        cap is not None
+        and sum(row["usage"]["cost_usd"] for row in responses[:-1]) >= cap
+    ):
         return "a model response was requested after reaching the frozen spend cap"
     return None
 
@@ -435,7 +528,11 @@ def _match_responding_model(output: Path, model: str) -> str | None:
 
 
 def _attempt(
-    output: Path, slot: Slot, plan: dict[str, Any], arm: dict[str, Any]
+    output: Path,
+    slot: Slot,
+    plan: dict[str, Any],
+    arm: dict[str, Any],
+    provider: Provider | None = None,
 ) -> None:
     directory = slot.directory(output)
     attempt_path = directory / "attempt.json"
@@ -450,12 +547,21 @@ def _attempt(
         raise ValueError(f"{slot.arm} checkout changed since it was bound")
     directory.mkdir(parents=True)
     records = directory / "records"
-    command = generate_command(directory, checkout, plan, slot.task)
+    command = generate_command(directory, checkout, plan, slot.task, provider)
     print(f"{slot.key}: running native generator", flush=True)
     with (directory / "native.log").open("wb") as log:
-        outcome = subprocess.run(
-            command, cwd=checkout, check=False, stdout=log, stderr=log
-        )
+        try:
+            exit_code = subprocess.run(
+                command,
+                cwd=checkout,
+                env=_provider_env(provider),
+                check=False,
+                stdout=log,
+                stderr=log,
+                timeout=plan.get("trial_timeout"),
+            ).returncode
+        except subprocess.TimeoutExpired:
+            exit_code = None
     if checkout_commit(checkout) != arm["commit"]:
         raise ValueError(f"{slot.arm} checkout changed during {slot.key}")
     found = sorted(records.glob("*/meta.json"))
@@ -467,7 +573,13 @@ def _attempt(
         check_generation(slot, plan, metadata)
     response_log = directory / "responses.jsonl"
     responses = read_responses(response_log)
-    problem = usage_problem(metadata, responses)
+    problem = (
+        "native trial exceeded the frozen wall-clock limit"
+        if exit_code is None
+        else usage_problem(
+            metadata, responses, allow_unpriced=plan["settings"]["max_cost"] is None
+        )
+    )
     if problem is None and metadata is not None:
         problem = budget_problem(metadata, responses, plan["settings"])
         if problem is None:
@@ -483,7 +595,7 @@ def _attempt(
             "slot": slot.key,
             "plan_sha256": digest(output / "private" / "plan.json"),
             "commit": arm["commit"],
-            "exit_code": outcome.returncode,
+            "exit_code": exit_code,
             "record_id": record.parent.name if record else None,
             "meta_sha256": digest(record) if record else None,
             "files": files,
@@ -493,7 +605,7 @@ def _attempt(
             else None,
         },
     )
-    print(f"{slot.key}: exit {outcome.returncode}", flush=True)
+    print(f"{slot.key}: exit {exit_code}", flush=True)
     if problem:
         raise ValueError(f"{slot.key}: {problem}. See {directory / 'native.log'}")
 
@@ -504,12 +616,17 @@ def read_responses(log: Path) -> list[dict[str, Any]]:
     return [json.loads(line) for line in log.read_text(encoding="utf-8").splitlines()]
 
 
-def run(output: Path, checkouts: dict[str, Path]) -> None:
+def run(
+    output: Path, checkouts: dict[str, Path], provider: Provider | None = None
+) -> None:
     plan = load_plan(output)
-    arms = {arm: _bind_arm(output, arm, path, plan) for arm, path in checkouts.items()}
+    arms = {
+        arm: _bind_arm(output, arm, path, plan, provider)
+        for arm, path in checkouts.items()
+    }
     for slot in slots(plan):
         if slot.arm in arms:
-            _attempt(output, slot, plan, arms[slot.arm])
+            _attempt(output, slot, plan, arms[slot.arm], provider)
 
 
 def main() -> None:
@@ -524,7 +641,18 @@ def main() -> None:
     init.add_argument("--repetitions", type=int, required=True)
     init.add_argument("--max-turns", type=int, required=True)
     init.add_argument("--max-validations", type=int, required=True)
-    init.add_argument("--max-cost", type=float, required=True)
+    spend = init.add_mutually_exclusive_group(required=True)
+    spend.add_argument("--max-cost", type=float)
+    spend.add_argument(
+        "--unpriced",
+        dest="max_cost",
+        action="store_const",
+        const=None,
+        help="use the fixed non-dollar budgets and report dollar cost as unknown",
+    )
+    init.add_argument(
+        "--trial-timeout", type=float, help="wall-clock seconds per trial"
+    )
     init.add_argument("--build-timeout", type=float, default=30)
     init.add_argument("--render-timeout", type=float, default=60)
     init.add_argument("--request-timeout", type=float, default=120)
@@ -532,6 +660,10 @@ def main() -> None:
     execute.add_argument("output", type=Path)
     execute.add_argument("--old", type=Path)
     execute.add_argument("--new", type=Path)
+    execute.add_argument("--api-base", help="bound HTTPS OpenAI Responses base URL")
+    execute.add_argument(
+        "--api-key-file", type=Path, help="read this bearer token in memory"
+    )
     review = commands.add_parser(
         "review", help="replay artifacts and create the blind review bundle"
     )
@@ -548,10 +680,19 @@ def main() -> None:
         if command == "init":
             freeze_plan(output, make_plan(**args))
         elif command == "run":
+            api_base = args.pop("api_base")
+            key_file = args.pop("api_key_file")
+            if (api_base is None) != (key_file is None):
+                parser.error("--api-base and --api-key-file require one another")
+            provider = (
+                Provider(api_base.rstrip("/"), key_file.expanduser().resolve())
+                if api_base is not None and key_file is not None
+                else None
+            )
             checkouts = {arm: path for arm, path in args.items() if path is not None}
             if not checkouts:
                 parser.error("run needs --old, --new, or both checkouts")
-            run(output, checkouts)
+            run(output, checkouts, provider)
         else:
             from brickwright.evaluation.p001_review import build_report, prepare_review
 

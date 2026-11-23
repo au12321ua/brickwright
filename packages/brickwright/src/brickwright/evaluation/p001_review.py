@@ -109,7 +109,9 @@ def _trials(output: Path, plan: dict[str, Any]) -> list[Trial]:
         models = tuple(
             sorted({row["model"] for row in responses if isinstance(row["model"], str)})
         )
-        issue = attempt["usage_problem"] or usage_problem(metadata, responses)
+        issue = attempt["usage_problem"] or usage_problem(
+            metadata, responses, allow_unpriced=plan["settings"]["max_cost"] is None
+        )
         if issue is None:
             issue = budget_problem(metadata, responses, plan["settings"])
         result.append(
