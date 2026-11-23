@@ -41,3 +41,20 @@
 - Superseded by: none
 
 以上三项条件同时作为 P-001 的行为验收标准。
+
+## U-06 — 以 OMR36 演示完整搭建流程
+
+- Source: 2026-11-22，客户版设计稿获认可后，用户说明「真实评审我打算用../brick-workspace/build/omr36-brickwright-v2」「接入LijuBrick也可以暂缓，重点只是做出一个demo」「我是想写一个总设计再派生提案」。
+- Supersedes: none
+- Superseded by: none
+
+下一阶段的目标是做出能演示理解、规划、搭建、结构检查、外观评审和交付全流程的 demo。
+评测使用 OMR36 BrickWright 从零版第二版。LijuBrick 接入暂缓。先写[总设计](design/agent-build-flow.md)，再从中派生提案。
+
+## U-07 — 演示统一使用 gpt-6.2-sol medium
+
+- Source: 2026-11-22，用户在确认总设计规划时说明「模型都用gpt-6.2-sol mediumn」。
+- Supersedes: none
+- Superseded by: none
+
+U-06 的演示中，主代理、子代理和评审代理均使用 `gpt-6.2-sol`，推理强度 medium。

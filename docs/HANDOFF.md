@@ -15,6 +15,10 @@
 
 修改模型校验或产物时，同时查看 [验证与导出设计](design/validation-and-export.md)。
 
+## 下一阶段：代理搭建流程演示
+
+[总设计](design/agent-build-flow.md)规划了理解、规划、搭建、结构检查、外观评审和交付的完整流程，以 OMR36 从零版第二版六题演示。P-004 至 P-006 为草案，见[提案索引](proposals/README.md)。放宽时限后的 `develop` 基线已提交到 Maestro。[基线运行](http://localhost:8420/runs/run_01m834xe645ngv8jjcmc40svmx)
+
 ## 连接装配、知识查询和零件覆盖
 
 - 从搭建意图查件可用 `bricklayer.find_connection_pairs`。已有模型可用 `find_connection_candidates` 查安装姿态，`trial_connections` 试装，`place_connection` 提交。内置代理和外部代理可收到同一组执行原因码、现场证据和修复建议。[连接驱动装配提案](proposals/P-001-connection-driven-building.md)
