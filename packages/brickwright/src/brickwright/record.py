@@ -165,6 +165,9 @@ class Meta(BaseModel):
     timing: Timing | None = None  # detailed per-phase wall-clock breakdown
     usage: Usage | None = None  # token usage & cost info
     forked_from: str | None = None
+    flow: int | None = None
+    conditions_sha256: str | None = None
+    finalized_flow_sha256: str | None = None
 
 
 class Snapshot:
@@ -402,7 +405,9 @@ class Record:
         ]
         for path in paths:
             path.unlink(missing_ok=True)
-        self.update_meta(finalized=False, exported_source_sha256=None)
+        self.update_meta(
+            finalized=False, exported_source_sha256=None, finalized_flow_sha256=None
+        )
 
     def read_meta(self) -> Meta:
         meta = Meta.model_validate_json(self.meta_path.read_text())
@@ -423,6 +428,20 @@ class Record:
             or not self.ldr_path.is_file()
         ):
             meta = meta.model_copy(update={"finalized": False})
+        if meta.finalized and meta.flow:
+            from .flow.integrations import delivery_review_current
+            from .flow.state import delivery_stamp
+
+            try:
+                stamp = delivery_stamp(self, meta.prompt_image)
+            except OSError:
+                stamp = None
+            if (
+                stamp is None
+                or stamp != meta.finalized_flow_sha256
+                or not delivery_review_current(self)
+            ):
+                meta = meta.model_copy(update={"finalized": False})
         return meta
 
     def write_meta(self, meta: Meta) -> None:
@@ -497,6 +516,7 @@ class Record:
         image: Path | str | None = None,
         from_id: str | None = None,
         external: bool = False,
+        task_path: Path | None = None,
     ) -> Record:
         """Create a new record directory and return a handle to it.
 
@@ -508,10 +528,13 @@ class Record:
         # prompt and prompt image) so the id can carry a readable slug derived
         # from them.
         cloned_src: str | None = None
+        inherited_task: Path | None = None
         if from_id is not None:
             source = cls.load(config, from_id)
             cloned_src = source.read_build()
             source_meta = source.read_meta()
+            if source_meta.flow and (source.path / "task.json").is_file():
+                inherited_task = source.path / "task.json"
             if not prompt and image is None:
                 prompt = source_meta.prompt
             if image is None:
@@ -525,6 +548,15 @@ class Record:
             prompt_image = f"prompt{image.suffix}"
             image_bytes = image.read_bytes()
 
+        task_bytes = None
+        condition_bytes = None
+        if config.flow:
+            from .flow.artifacts import document_bytes, original_conditions
+
+            task_path = task_path or inherited_task
+            task_bytes = task_path.read_bytes() if task_path is not None else None
+            condition_bytes = document_bytes(original_conditions(task_bytes))
+
         slug = _slugify(prompt) or (_slugify(image.stem) if image is not None else "")
         record_id = new_id(slug)
         path = config.records_dir / record_id
@@ -536,6 +568,11 @@ class Record:
 
         if prompt_image is not None:
             (path / prompt_image).write_bytes(image_bytes)
+
+        if condition_bytes is not None:
+            (path / "conditions.json").write_bytes(condition_bytes)
+        if task_bytes is not None:
+            (path / "task.json").write_bytes(task_bytes)
 
         rec.write_meta(
             Meta(
@@ -550,6 +587,10 @@ class Record:
                 prompt_image=prompt_image,
                 created=datetime.now(UTC).astimezone().replace(microsecond=0),
                 forked_from=from_id,
+                flow=1 if config.flow else None,
+                conditions_sha256=sha256(condition_bytes).hexdigest()
+                if condition_bytes is not None
+                else None,
             )
         )
         return rec

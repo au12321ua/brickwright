@@ -12,6 +12,15 @@ DEFAULT_RECORDS_DIR = "records"
 RECORDS_DIR_ENV = "BRICKWRIGHT_RECORDS_DIR"
 
 
+def default_flow() -> bool:
+    return os.getenv("BRICKWRIGHT_FLOW", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+
+
 def default_records_dir() -> Path:
     return Path(os.environ.get(RECORDS_DIR_ENV, DEFAULT_RECORDS_DIR))
 
@@ -62,6 +71,8 @@ class Config(BaseModel):
 
     records_dir: Path = Field(default_factory=default_records_dir)
     model: str | None = None
+    flow: bool = Field(default_factory=default_flow)
+    flow_review_rounds: int = Field(default=2, ge=0)
     effort: Effort | None = Effort.HIGH
     max_validations: int = Field(default=50, ge=0)  # 0 disables the validation cap
     max_turns: int = Field(default=200, ge=0)  # 0 disables the turn cap

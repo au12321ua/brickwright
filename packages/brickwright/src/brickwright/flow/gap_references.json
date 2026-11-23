@@ -1,0 +1,137 @@
+{
+  "schema_version": 1,
+  "references": [
+    {
+      "id": "ldraw-window-casement",
+      "source": "P-001",
+      "gap": "missing_endpoint",
+      "host": "60594",
+      "child": "60608",
+      "catalog_version": "2026-10",
+      "catalog_sha256": "c091fcce1e79bde06b59349146e3c40346d72b0d890ee05650ccc2c56d2b05a7",
+      "source_url": "https://library.ldraw.org/omr/sets/204",
+      "source_sha256": "533971e4b7b71c5defd200ffb5e13375823bd1a0410308f198d61762d82e4096",
+      "reference_sha256": "1c3d6f50b2a19932f25b8e4da29ac7644c6a24cbe940e6a641eb90a1bed13cc9",
+      "reference_lines": "241–243, 274–276, 281–283",
+      "tolerance": 0.00001,
+      "candidate_count": 0,
+      "poses": [
+        {
+          "position": [
+            -32,
+            4,
+            4
+          ],
+          "rotation": [
+            [
+              0,
+              0,
+              -1
+            ],
+            [
+              0,
+              1,
+              0
+            ],
+            [
+              1,
+              0,
+              0
+            ]
+          ]
+        },
+        {
+          "position": [
+            32,
+            4,
+            4
+          ],
+          "rotation": [
+            [
+              0,
+              0,
+              1
+            ],
+            [
+              0,
+              1,
+              0
+            ],
+            [
+              -1,
+              0,
+              0
+            ]
+          ]
+        }
+      ],
+      "witness": "The frame and casement contact at the real hinge seat. The package's marked hinge types have no compatibility rule, and the normal candidate query finds no mount at these observed poses."
+    },
+    {
+      "id": "ldraw-rim-and-tire-seat",
+      "source": "P-001",
+      "gap": "endpoint_offset",
+      "host": "56904",
+      "child": "30699",
+      "catalog_version": "2026-10",
+      "catalog_sha256": "c091fcce1e79bde06b59349146e3c40346d72b0d890ee05650ccc2c56d2b05a7",
+      "source_url": "https://library.ldraw.org/omr/sets/871",
+      "source_sha256": "e5cd69423ad7669085f18892971b8bfebd7769efa5d09b9b47f88b454c6d0ecb",
+      "reference_sha256": "99928ec0bb80d925296f4f8c7365418eab62242e6147bb33c9000d8e3789ad64",
+      "reference_lines": "799, 802, 806–811",
+      "tolerance": 0.00001,
+      "candidate_count": 32,
+      "poses": [
+        {
+          "position": [
+            0,
+            0,
+            0
+          ],
+          "rotation": [
+            [
+              1,
+              0,
+              0
+            ],
+            [
+              0,
+              1,
+              0
+            ],
+            [
+              0,
+              0,
+              1
+            ]
+          ]
+        },
+        {
+          "position": [
+            0,
+            0,
+            0
+          ],
+          "rotation": [
+            [
+              1,
+              0,
+              0
+            ],
+            [
+              0,
+              -1,
+              0
+            ],
+            [
+              0,
+              0,
+              -1
+            ]
+          ]
+        }
+      ],
+      "witness": "Standard rim endpoints are displaced relative to the seats at the observed MPD pose. A record-local offset mates the direct pair, while normal standard-catalog trials all collide against the actual rim."
+    }
+  ]
+}

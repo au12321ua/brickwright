@@ -3,14 +3,32 @@
 from __future__ import annotations
 
 import io
+import json
 from collections.abc import Iterable
 from contextlib import redirect_stdout
 from hashlib import sha256
-from typing import TYPE_CHECKING
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from ..config import Config
+from ..flow import flow_status
+from ..flow.artifacts import Plan, parse_artifact
+from ..flow.integrations import (
+    check_module,
+    merge_context,
+    merge_evidence,
+    prepare_merge,
+)
+from ..flow.state import StructureInputs, save_structure, summarize_flow
+from ..flow.structure import (
+    Column,
+    StructureReport,
+    classify_structure,
+    inspect_build,
+    inspect_mpd,
+)
 from ..record import Record, Status
 from . import build_execution
 from .diagnostics import (
@@ -56,6 +74,20 @@ class ValidationReport(DiagnosticReport):
     dimensions: BuildDimensions | None = None  # bounding-box size of the build
     brick_count: int | None = None  # total number of parts in the build
     stdout: str = ""  # everything printed to stdout while creating the build
+    structure: StructureReport | None = None
+    flow: dict[str, Any] | None = None
+    module_contract_sha256: str | None = None
+    module_mpd_sha256: str | None = None
+
+    def agent_payload(self) -> dict[str, Any]:
+        """Serialize bounded diagnostics and counts, with pointers to full evidence."""
+        data = self.model_dump(mode="json", exclude={"flow", "structure"})
+        if self.flow is not None:
+            data["flow"] = summarize_flow(self.flow)
+        return data
+
+    def agent_json(self, indent: int | None = None) -> str:
+        return json.dumps(self.agent_payload(), indent=indent, ensure_ascii=False)
 
     @property
     def failed_checks(self) -> list[str]:
@@ -132,10 +164,14 @@ def validate(record: Record, config: Config | None = None) -> ValidationReport:
         source = record.read_build()
     except (OSError, UnicodeError) as exc:
         report = source_read_failure(exc)
+        if record.read_meta().flow is not None:
+            report = report.model_copy(update={"flow": flow_status(record)})
         _write_report(record, report)
         record.update_meta(status=Status.ERROR, validated_source_sha256=None)
         return report
 
+    if record.read_meta().flow is not None:
+        return validate_flow(record, source, config)
     report = build_execution.run_guarded(
         _validate,
         (str(record.build_path), source),
@@ -153,6 +189,103 @@ def validate(record: Record, config: Config | None = None) -> ValidationReport:
         ),
     )
     return save_validation(record, source, report)
+
+
+def validate_flow(record: Record, source: str, config: Config) -> ValidationReport:
+    """Capture native geometry and run the standard catalog in a separate worker."""
+    try:
+        merge = prepare_merge(record)
+        plan_path = record.path / "plan.json"
+        try:
+            raw_plan = plan_path.read_bytes()
+        except FileNotFoundError:
+            raw_plan = None
+        inputs = StructureInputs.capture(record, sha256(source.encode()).hexdigest())
+        if (
+            raw_plan is not None
+            and sha256(raw_plan).hexdigest() != inputs.plan_sha256
+            or raw_plan is None
+            and inputs.plan_sha256 is not None
+        ):
+            raise ValueError("The plan changed during validation.")
+        if (
+            merge is not None
+            and sha256(merge.manifest_bytes).hexdigest() != inputs.manifest_sha256
+        ):
+            raise ValueError("The merge manifest changed during validation.")
+    except (OSError, ValueError) as exc:
+        report = ValidationReport.error(
+            str(exc),
+            error_type=type(exc).__name__,
+            diagnostics=[exception_diagnostic(exc, "validate", code="flow.modules")],
+        )
+        return save_validation(
+            record, source, report.model_copy(update={"flow": flow_status(record)})
+        )
+    plan, _ = (
+        parse_artifact(record, "plan", raw_plan) if raw_plan is not None else (None, [])
+    )
+    plan = plan if isinstance(plan, Plan) else None
+    result = build_execution.run_guarded(
+        _validate_native_structure,
+        (str(record.build_path), source, plan, merge),
+        config.build_timeout,
+        lambda exc: (
+            ValidationReport.error(
+                f"Validation failed: {exc}",
+                error_type=type(exc).__name__,
+                diagnostics=[
+                    build_execution.subprocess_diagnostic(
+                        exc, "validate", config.build_timeout
+                    )
+                ],
+            ),
+            None,
+            None,
+            [],
+        ),
+    )
+    report, mpd, native, native_issues = result
+    standard, standard_issues = (None, [])
+    if mpd is not None:
+        standard, standard_issues = build_execution.run_guarded(
+            inspect_mpd,
+            (mpd, plan, merge),
+            config.build_timeout,
+            lambda exc: (
+                None,
+                [
+                    build_execution.subprocess_diagnostic(
+                        exc, "structure", config.build_timeout
+                    )
+                ],
+            ),
+        )
+    structure = classify_structure(
+        native, standard, mpd, plan, [*native_issues, *standard_issues]
+    )
+    save_structure(record, inputs, structure, mpd, report.ok)
+    state = flow_status(record)
+    report = report.model_copy(update={"flow": state, "structure": structure})
+    return save_validation(record, source, report)
+
+
+def _validate_native_structure(
+    build_path: str, source: str, plan: Plan | None, merge: Any
+) -> tuple[ValidationReport, bytes | None, Column | None, list[Diagnostic]]:
+    from bricklayer import to_ldraw
+
+    with merge_context(merge):
+        build, report = build_and_validate(build_path, source)
+        if build is None:
+            return report, None, None, []
+        try:
+            mpd = to_ldraw(build).encode("utf-8")
+            column = inspect_build(build, plan)
+            column.modules, diagnostics = merge_evidence(build, merge)
+        except Exception as exc:
+            return report, None, None, [exception_diagnostic(exc, "structure")]
+    return report, mpd, column, diagnostics
 
 
 def save_validation(
@@ -184,6 +317,8 @@ def save_validation(
                 *report.diagnostics,
             ],
         )
+    if report.flow is None and record.read_meta().flow is not None:
+        report = report.model_copy(update={"flow": flow_status(record)})
     snapshot = record.snapshot_source(source)
     report = report.model_copy(
         update={
@@ -251,9 +386,29 @@ def build_and_validate(
             checks = physical.report()
             required = {check.name for check in checks}
             checks.extend(check for check in custom if check.name not in required)
-        return build, ValidationReport.from_checks(
-            checks, stdout=_stdout(buf), build=build
-        )
+        digest, module_issues = check_module(build, Path(build_path).parent)
+        if digest is not None or module_issues:
+            checks.append(
+                CheckResult(
+                    name="module_contract",
+                    passed=not module_issues,
+                    detail=module_issues[0].message if module_issues else None,
+                    diagnostics=module_issues,
+                )
+            )
+        report = ValidationReport.from_checks(checks, stdout=_stdout(buf), build=build)
+        if digest is not None:
+            from bricklayer import to_ldraw
+
+            report = report.model_copy(
+                update={
+                    "module_contract_sha256": digest,
+                    "module_mpd_sha256": sha256(
+                        to_ldraw(build).encode("utf-8")
+                    ).hexdigest(),
+                }
+            )
+        return build, report
     except Exception as exc:
         return None, ValidationReport.error(
             captured_traceback(exc, build_path, source),
