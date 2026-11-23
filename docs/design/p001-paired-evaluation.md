@@ -81,3 +81,15 @@ uv run --locked python -m brickwright.evaluation.p001 report "$P001_OUTPUT" \
 2026-11-22 在 Maestro 核对了 `gpt-6.2-sol-medium` 修订 3。启用的适配器为 Codex、Claude Code、OpenCode 和 Terminus-2。BrickWright 的原生 `generate` 尚无平台适配器。本地冻结计划使用基线 `598cd99` 和含 P-001 的新版，从每版原生 CLI 逐题配对，两版各五次。冻结推理强度为 medium，每次 30 轮、12 次校验和 0.25 美元，构建、渲染和请求限时分别为 30、60、120 秒。
 
 本地尚缺可供原生 CLI 使用的授权模型配置。锁定的 LiteLLM 本地价格表也缺少 `gpt-6.2-sol` 的单价，当前无法核实冻结的美元预算。原生模型响应、成品及盲评尚未产生，U-05 保持待验收。
+
+### 提供方费率缺失时的本地运行
+
+获准省略美元预算时，新建一份计划，把 `init` 中的 `--max-cost` 换成
+`--unpriced --trial-timeout 1200`。两版用同一模型和推理强度，继续执行冻结的轮次、校验次数、
+构建、渲染、请求及单次试验限时。响应和汇总仍记录实际 token 和响应模型标识。
+美元总费用记为 `null`，待有费率时可另行核算。
+
+显式绑定 OpenAI Responses 兼容提供方时，给 `run` 同时传入
+`--api-base <HTTPS 地址>` 与 `--api-key-file <本地凭据文件>`。
+两版均由评测包装器将原生请求发到绑定地址，每次读取模型响应并记录用量，不跟随重定向。
+提供方配置与试验时间预算写入私有评测材料。原生搭建运行继续使用各提交自己的提示和工具。
