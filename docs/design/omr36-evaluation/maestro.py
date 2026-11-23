@@ -12,6 +12,7 @@ import time
 import zipfile
 from datetime import datetime
 from importlib import import_module
+from itertools import pairwise
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any
@@ -468,17 +469,48 @@ def seconds(start: str | None, end: str | None) -> float | None:
     return None
 
 
+def structural_repairs(checks: list[Json]) -> int:
+    """Count a new source or flow snapshot checked after a structural failure."""
+    versions = []
+    for check in checks:
+        flow = check.get("flow") or {}
+        key = flow.get("snapshot_id") or check.get("source_sha256")
+        if key is not None:
+            versions.append(
+                (
+                    key,
+                    check.get("ok") is False or flow.get("structural_passed") is False,
+                )
+            )
+    return sum(
+        failed and before != after
+        for (before, failed), (after, _) in pairwise(versions)
+    )
+
+
 def record_evidence(record: Path, attempt: Path) -> Json:
     native_checks = [
         read(path) for path in sorted(record.glob("snapshots/*/report.json"))
     ]
     rounds = [read(path) for path in sorted(record.glob("reviews/*/review.json"))]
+    accepted = sorted(
+        (row for row in rounds if row.get("status") == "accepted"),
+        key=lambda row: row["submitted_at"],
+    )
+    meta = read(record / "meta.json")
     result: Json = {
         "path": str(record.relative_to(attempt)),
-        "finalized": read(record / "meta.json").get("finalized"),
+        "finalized": meta.get("finalized"),
+        "flow_version": meta.get("flow"),
+        "finalized_flow_sha256": meta.get("finalized_flow_sha256"),
         "structure_checks": len(native_checks),
+        "structural_repairs_rechecked": structural_repairs(native_checks),
         "native_failed_checks": sum(
             check.get("ok") is False for check in native_checks
+        ),
+        "appearance_repairs_reviewed": sum(
+            before["snapshot_id"] != after["snapshot_id"]
+            for before, after in pairwise(accepted)
         ),
         "review_attempts": [
             {
