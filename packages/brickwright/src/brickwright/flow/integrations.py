@@ -80,6 +80,13 @@ def check_module(
     return modules.check_module(build, record_path)
 
 
+def capture_module_motion(build: LegoBuild) -> dict[str, Any]:
+    modules = _extension("modules")
+    if modules is None:
+        raise ValueError("Module motion capture is unavailable.")
+    return modules.capture_module_motion(build)
+
+
 def merge_evidence(
     build: LegoBuild, merge: Any
 ) -> tuple[list[dict[str, Any]], list[Diagnostic]]:

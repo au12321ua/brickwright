@@ -16,6 +16,7 @@ from ..config import Config
 from ..flow import flow_status
 from ..flow.artifacts import Plan, parse_artifact
 from ..flow.integrations import (
+    capture_module_motion,
     check_module,
     merge_context,
     merge_evidence,
@@ -78,12 +79,14 @@ class ValidationReport(DiagnosticReport):
     flow: dict[str, Any] | None = None
     module_contract_sha256: str | None = None
     module_mpd_sha256: str | None = None
+    module_motion: dict[str, Any] | None = None
 
     def agent_payload(self) -> dict[str, Any]:
         """Serialize bounded diagnostics and counts, with pointers to full evidence."""
+        if self.flow is None:
+            return self.model_dump(mode="json")
         data = self.model_dump(mode="json", exclude={"flow", "structure"})
-        if self.flow is not None:
-            data["flow"] = summarize_flow(self.flow)
+        data["flow"] = summarize_flow(self.flow)
         return data
 
     def agent_json(self, indent: int | None = None) -> str:
@@ -387,6 +390,12 @@ def build_and_validate(
             required = {check.name for check in checks}
             checks.extend(check for check in custom if check.name not in required)
         digest, module_issues = check_module(build, Path(build_path).parent)
+        module_motion = None
+        if digest is not None and not module_issues:
+            try:
+                module_motion = capture_module_motion(build)
+            except ValueError as exc:
+                module_issues.append(exception_diagnostic(exc, "module_validate"))
         if digest is not None or module_issues:
             checks.append(
                 CheckResult(
@@ -403,6 +412,7 @@ def build_and_validate(
             report = report.model_copy(
                 update={
                     "module_contract_sha256": digest,
+                    "module_motion": module_motion,
                     "module_mpd_sha256": sha256(
                         to_ldraw(build).encode("utf-8")
                     ).hexdigest(),

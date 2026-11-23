@@ -123,9 +123,9 @@ def inspect_build(
         else {}
     )
     return Column(
-        sdk_version=version("bricklayer-sdk"),
+        sdk_version=sdk_version(),
         catalog_version=OFFICIAL_PARTS_VERSION,
-        catalog_sha256=_catalog_sha256(),
+        catalog_sha256=catalog_sha256(),
         part_count=len(leaves),
         instances=instances,
         components=components,
@@ -255,7 +255,12 @@ def _ordered_endpoints(endpoints) -> list[dict[str, Any]]:
 
 
 @cache
-def _catalog_sha256() -> str:
+def sdk_version() -> str:
+    return version("bricklayer-sdk")
+
+
+@cache
+def catalog_sha256() -> str:
     path = files("bricklayer.ldraw") / f"official_catalog_{OFFICIAL_PARTS_VERSION}.json"
     return sha256(path.read_bytes()).hexdigest()
 
@@ -456,23 +461,27 @@ def classify_structure(
         for name, column in (("native", native), ("standard", standard)):
             if not column.components:
                 continue
+            attached = {by_column[name] for by_column in declared.values()}
             primary = max(
-                range(len(column.components)),
+                (
+                    index
+                    for index in range(len(column.components))
+                    if index not in attached
+                ),
                 key=lambda index: column.components[index].part_count,
+                default=None,
             )
-            attached = {primary}
-            for obj_id, by_column in declared.items():
-                index = by_column[name]
-                if index != primary:
-                    attached.add(index)
-                    classifications.append(
-                        {
-                            "column": name,
-                            "component": index,
-                            "kind": "intentional",
-                            "object_id": obj_id,
-                        }
-                    )
+            if primary is not None:
+                attached.add(primary)
+            classifications.extend(
+                {
+                    "column": name,
+                    "component": by_column[name],
+                    "kind": "intentional",
+                    "object_id": obj_id,
+                }
+                for obj_id, by_column in declared.items()
+            )
             component_of = {
                 member: index
                 for index, group in enumerate(column.components)
