@@ -13,6 +13,7 @@ from .merge import (
     prepare_merge,
     verify_merge,
 )
+from .motion import capture_module_motion
 from .records import (
     check_module,
     child_ref,
@@ -24,6 +25,7 @@ from .records import (
 __all__ = [
     "FrozenMerge",
     "ModuleError",
+    "capture_module_motion",
     "check_module",
     "child_ref",
     "finish_module_session",
