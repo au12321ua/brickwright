@@ -1,6 +1,6 @@
 # P-006 — 模块接口与分块搭建
 
-Status: draft
+Status: accepted
 
 ## 问题与目标
 

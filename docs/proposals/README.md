@@ -13,10 +13,10 @@
 | P-001 | accepted | [按连接关系选件、装配与修复](P-001-connection-driven-building.md) |
 | P-002 | completed | [按搭建问题检索的 BrickWright 知识库](archive/P-002-construction-knowledge.md) |
 | P-003 | completed | [LDraw 2026-10 全量索引与可验证装配覆盖](archive/P-003-official-part-coverage.md) |
-| P-004 | draft | [流程放行与记录产物](P-004-flow-gates-and-records.md) |
-| P-005 | draft | [对齐渲染与特征评审](P-005-aligned-review.md) |
-| P-006 | draft | [模块接口与分块搭建](P-006-modular-building.md) |
-| P-007 | draft | [基于官方参考装配的批量验证与成类修复](P-007-official-reference-assemblies.md) |
+| P-004 | accepted | [流程放行与记录产物](P-004-flow-gates-and-records.md) |
+| P-005 | accepted | [对齐渲染与特征评审](P-005-aligned-review.md) |
+| P-006 | accepted | [模块接口与分块搭建](P-006-modular-building.md) |
+| P-007 | accepted | [基于官方参考装配的批量验证与成类修复](P-007-official-reference-assemblies.md) |
 
 P-001 已通过离线验收。首轮 Maestro 外部代理对照的质量与完成度持平，连接放置占比下降。铰链修复后的外部复测通过原五题三项条件，原生代理的行为验收仍待运行。[复测结果](../design/p001-paired-evaluation.md#铰链修复复测结果) · [复测快照](http://localhost:8420/snapshots/snp_01m81459cgpjb3nee5gkwjz5tt)
 

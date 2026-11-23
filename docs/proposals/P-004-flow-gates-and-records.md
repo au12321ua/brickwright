@@ -1,6 +1,6 @@
 # P-004 — 流程放行与记录产物
 
-Status: draft
+Status: accepted
 
 ## 问题与目标
 

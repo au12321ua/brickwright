@@ -1,6 +1,6 @@
 # P-007 — 基于官方参考装配的批量验证与成类修复
 
-Status: draft
+Status: accepted
 
 ## 问题与目标
 

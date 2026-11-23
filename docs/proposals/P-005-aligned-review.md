@@ -1,6 +1,6 @@
 # P-005 — 对齐渲染与特征评审
 
-Status: draft
+Status: accepted
 
 ## 问题与目标
 
