@@ -98,7 +98,7 @@ uv run python /path/to/brickwright/scripts/replay_p004_structure.py \
 
 ## P-007 修正后的对照
 
-历史 SDK 工作树为 `42453a5`。P-007 的轮辋端点修正通过 `3280f02` 进入 `develop`。集成复放在含重新核对的窗扇缺项证据的 `5413d15` 执行。两版均使用 LDraw 2026-10，目录 SHA-256 分别为 `c091fcce1e79bde06b59349146e3c40346d72b0d890ee05650ccc2c56d2b05a7` 和 `3060827da8b32194dae89907a368437316257f7c6c9d83a1b7ac9a438132e8b7`。完整独立归档见[历史复放](../../.local/agent-build-flow/p004/historical-pre-p007/summary.json)和[集成后复放](../../.local/agent-build-flow/p004/integrated-p007/summary.json)。最初的 `p004/summary.json` 及其逐例文件保留原样。[P-007](../proposals/P-007-official-reference-assemblies.md)
+历史 SDK 工作树为 `42453a5`。P-007 的轮辋端点修正通过 `3280f02` 进入 `develop`。集成复放在含重新核对的窗扇缺项证据的 `5413d15` 执行。两版均使用 LDraw 2026-10，目录 SHA-256 分别为 `c091fcce1e79bde06b59349146e3c40346d72b0d890ee05650ccc2c56d2b05a7` 和 `3060827da8b32194dae89907a368437316257f7c6c9d83a1b7ac9a438132e8b7`。两个版本的完整证据分别位于主工作树的 `.local/agent-build-flow/p004/historical-pre-p007/` 和 `.local/agent-build-flow/p004/integrated-p007/`，各目录中的 `summary.json` 汇总该次复放。最初的 `p004/summary.json` 及其逐例文件保留原样。[P-007](../proposals/archive/P-007-official-reference-assemblies.md)
 
 | 巴士复放版本 | 记录栏组件 | 标准栏组件 | 放行结果 |
 | --- | --- | --- | --- |

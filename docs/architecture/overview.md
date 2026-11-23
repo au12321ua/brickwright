@@ -23,3 +23,9 @@
 - [搭建知识库](../../packages/brickwright/src/brickwright/knowledge/__init__.py)按任务描述、零件号或诊断码索引随包提供的条目。内置工具和 `brickwright knowledge search` / `show` 共用正文、示例和署名。
 
 新旧代理的行为评估使用[配对评测入口](../../packages/brickwright/src/brickwright/evaluation/p001.py)。它冻结任务、推理设置和预算，分别用两版工作树里的原生代理生成模型。运行结果用于检验代理行为；SDK 的装配测试可独立在本地运行。
+
+## 分阶段搭建
+
+新建记录可选择流程版本。记录保存原始题目以及可独立更新的特征与规划，再按父源码、目录数据、子快照清单和 MPD 字节冻结整件。CLI 与内置驱动通过同一套记录 API 读写。模块子记录封存在父记录下，结构检查在整件中复核契约指定的端点和运动范围。[流程层](../../packages/brickwright/src/brickwright/flow/) · [模块层](../../packages/brickwright/src/brickwright/modules/)
+
+固定机位评审读取待交付的 MPD，在单独会话内对照目标图和特征。评审批次保存图像、输入摘要、会话凭据和逐项结论；模型或比对输入变化后需要重新取得适用于当前版本的评审。[评审实现](../../packages/brickwright/src/brickwright/aligned_review.py) · [流程放行](../design/validation-and-export.md)
