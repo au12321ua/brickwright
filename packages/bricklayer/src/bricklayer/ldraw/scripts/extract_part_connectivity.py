@@ -46,6 +46,22 @@ _NOTE = (
 )
 
 
+_WHEEL_SEATS = {
+    "56904": (
+        "21",
+        -2,
+        0,
+        "Centered the fixed_21_in tyre seat between the matched radius-38 retaining shoulders in parts/s/56904s00.dat and parts/56898.dat. Verified by 56904c01.dat in LDraw 2026-10.",
+    ),
+    "7039": (
+        "5",
+        -2.33335,
+        -2,
+        "Centered the fixed_5_in tyre seat on the radius-19 collar, spanning Z=-8 to Z=+4 in parts/497a.dat. Verified by 7039c01.dat and 7039c03.dat in LDraw 2026-10.",
+    ),
+}
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = extractor_parser(__doc__, output=OUTPUT, ldraw=True)
     parser.add_argument("--bricknet-data", help="BrickNet's _data/<version> directory")
@@ -96,7 +112,7 @@ def build_connectivity(
         if source is None:
             missing.append(part_id)
             continue
-        entry = labels[source.part_id]
+        entry, note = _correct_source(labels[source.part_id], source.part_id)
         parts[part_id] = {
             "connectors": (
                 _grouped_rows(entry, type_aliases)
@@ -106,7 +122,25 @@ def build_connectivity(
         }
         if source.part_id != part_id:
             parts[part_id]["_source"] = source.part_id
+        if note is not None:
+            parts[part_id]["_note"] = note
     return parts, missing
+
+
+def _correct_source(entry: dict, part_id: str) -> tuple[dict, str | None]:
+    """Correct the source seat before projecting labels into any derived ID."""
+    if part_id not in _WHEEL_SEATS:
+        return entry, None
+    subtype, old_z, new_z, note = _WHEEL_SEATS[part_id]
+    fixed = entry.get("fixed", {})
+    polarity = fixed.get(subtype, {})
+    rows = polarity.get("in", [])
+    corrected = [
+        [0, 0, new_z, *row[3:]] if row[:3] == [0, 0, old_z] else row for row in rows
+    ]
+    if corrected == rows:
+        return entry, None
+    return entry | {"fixed": fixed | {subtype: polarity | {"in": corrected}}}, note
 
 
 def _transformed_rows(entry: dict, aliases: dict[str, str], pose: Pose) -> list[dict]:
