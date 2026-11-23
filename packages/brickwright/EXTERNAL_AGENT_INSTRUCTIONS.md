@@ -14,6 +14,9 @@ brickwright external instructions > INSTRUCTIONS.md
 
 Then, read the file. As it is quite long, you may have to read it in several segments.
 See **Choosing a connection** for side-mounted parts and moving assemblies.
+In an exploration script, pass a dictionary as `evidence` to
+`find_connection_candidates` or `trial_connections`. Print it after the call
+to see where an empty search stopped or which of the trialed candidates collided.
 
 Use `brickwright knowledge search <query>` to find local guides by build task, part ID,
 or diagnostic code. Use `brickwright knowledge show <id>` to read the steps, runnable

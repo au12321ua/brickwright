@@ -70,8 +70,17 @@ The `hinged-panels` knowledge example shows this on a crate.
 Run `build.trial_connections(candidates)` to inspect several mounting poses.
 Use a passing candidate with `build.place_connection`. If a trial fails, read
 its `diagnostics` for the endpoint, colliding parts, or sampled movement, then
-adjust the mount or clearance. When you already know both endpoints,
+adjust the mount or clearance. For an empty query or a batch with no passing
+trial, pass a dictionary as `evidence` and print it after the query or trial.
+The query reports endpoint examples and where the search stopped. The trial
+summary reports the budget, checked candidates, rejection counts, and examples
+of fitted poses and collisions. When you already know both endpoints,
 `build.connect` provides direct placement.
+
+For an angled installation with a known orientation, give the loose assembly's
+`target_rotation`. Compare the candidate's fitted rotation and translation with
+the desired pose before trialing it. `target_position` refers to the incoming
+connector's seated position in the build, so use it to fit an insertion point.
 
 ## Working method
 

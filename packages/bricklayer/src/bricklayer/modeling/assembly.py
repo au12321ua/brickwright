@@ -23,7 +23,7 @@ from __future__ import annotations
 
 from collections import Counter
 from collections.abc import Iterable, Iterator
-from dataclasses import dataclass, field, fields, replace
+from dataclasses import asdict, dataclass, field, fields, replace
 from enum import StrEnum
 from functools import cache
 from itertools import chain, islice
@@ -62,10 +62,13 @@ from ..ldraw import partdata
 from ..parts import Element
 from ..parts.mountings import verified_mountings
 from ..parts.official import lookup_part, parts_with_connectors
+from ._assembly_evidence import endpoint_examples
 from .articulation import MotionRange, MotionReport
 from .placement import Placement, connect_placement, leaf_paths, path_pose
 
 if TYPE_CHECKING:
+    from pydantic import JsonValue
+
     from .build import LegoBuild, NameRef
 
 ConnectorQuery: TypeAlias = ConnectorType | str | Iterable[ConnectorType | str]
@@ -336,10 +339,13 @@ def connection_endpoints(
     return tuple(
         endpoint
         for endpoint in _model_endpoints(model, on, connector_type, facing, toward)
-        if (
-            endpoint.connector not in model._mating.connectors
-            or _still_reachable(model, endpoint)
-        )
+        if _query_endpoint_available(model, endpoint)
+    )
+
+
+def _query_endpoint_available(model: LegoBuild, endpoint: ConnectionEndpoint) -> bool:
+    return endpoint.connector not in model._mating.connectors or _still_reachable(
+        model, endpoint
     )
 
 
@@ -363,10 +369,18 @@ def find_connection_candidates(
     opening_toward: Direction | Vec3 | None,
     opening_point: Position | tuple[float, float, float] | None,
     limit: int,
+    evidence: dict[str, JsonValue] | None,
 ) -> tuple[ConnectionCandidate, ...]:
     """Implementation of model candidate lookup."""
     _check_limit(limit)
+    if evidence is not None:
+        evidence.clear()
+        evidence.update(stage="find_connection_candidates", limit=limit, returned=0)
     if not limit:
+        if evidence is not None:
+            _empty_search(
+                evidence, "query_limit", "Use a positive candidate query limit."
+            )
         return ()
     intent = None if intent is None else AssemblyIntent(intent)
     if content is not None and part_ids is not None:
@@ -380,18 +394,69 @@ def find_connection_candidates(
     if opening_toward is not None and not is_unit(opening_toward):
         raise ValueError("opening_toward must be a unit vector")
 
-    parents = tuple(
-        endpoint
-        for endpoint in connection_endpoints(
-            model,
-            on,
-            parent_type,
-            facing=facing,
-            toward=toward,
+    if evidence is not None:
+        parent_type = _repeatable_query(parent_type)
+        child_type = _repeatable_query(child_type)
+    selected = _model_endpoints(model, on, parent_type, facing, toward)
+    free = tuple(e for e in selected if _query_endpoint_available(model, e))
+    parents = tuple(e for e in free if _faces_intent(e, intent))
+    if evidence is not None:
+        rotation = (
+            target_rotation.matrix
+            if isinstance(target_rotation, Rotation)
+            else target_rotation
         )
-        if _faces_intent(endpoint, intent)
-    )
+        raw_child_types = _type_filter_evidence(child_type)
+        raw_parents = _model_endpoints(model, on, None, None, None)
+        evidence.update(
+            parent=endpoint_examples(model, raw_parents)
+            | {
+                "selected": len(selected),
+                "available": len(free),
+                "eligible": len(parents),
+            },
+            request={
+                "intent": intent,
+                "parent_type": _type_filter_evidence(parent_type),
+                "child_type": raw_child_types,
+                "joint_kind": joint_kind.name if joint_kind is not None else None,
+                "facing": _vector_evidence(facing),
+                "toward": _vector_evidence(toward),
+                "target_rotation": None
+                if rotation is None
+                else list(rotation.flatten()),
+                "target_position": _vector_evidence(target_position),
+                "opening_toward": _vector_evidence(opening_toward),
+                "opening_point": _vector_evidence(opening_point),
+                "motion": [
+                    {"kind": coords.kind.name, **asdict(coords)}
+                    for coords in (motion.lower, motion.upper)
+                ]
+                if motion is not None
+                else None,
+            },
+        )
+        if content is not None:
+            raw_children = (
+                list(_content_endpoints(content, None))
+                if isinstance(content, Element)
+                else _model_endpoints(content, None, None, None, None)
+            )
+            evidence["child"] = endpoint_examples(content, raw_children)
     if not parents:
+        if evidence is not None:
+            stopped_at = (
+                "host_selection"
+                if not selected
+                else "host_occupancy"
+                if not free
+                else "host_intent"
+            )
+            _empty_search(
+                evidence,
+                stopped_at,
+                "Use find_connectors to inspect the host and select an available endpoint.",
+            )
         return ()
     children = None if content is None else _content_endpoints(content, child_type)
     rules = _compatible_types(
@@ -416,6 +481,7 @@ def find_connection_candidates(
         joint_kind,
         opening_toward,
         None if opening_point is None else as_position(opening_point),
+        Counter() if evidence is not None else None,
     )
     # Explicit proximity ranks the actual host endpoints. Within each choice,
     # prefer verified catalog mounts. With no proximity, start with all matches
@@ -426,7 +492,90 @@ def find_connection_candidates(
     found = _ranked_candidates(
         batches, content, children, inventory, color, options, intent
     )
-    return tuple(islice(_distinct_candidates(found), limit))
+    result = tuple(islice(_distinct_candidates(found), limit))
+    if evidence is not None:
+        request = evidence["request"]
+        assert isinstance(request, dict)
+        requested_parts: list[JsonValue] | None = (
+            None if inventory is None else [*sorted(inventory)]
+        )
+        request.update(
+            part_ids=requested_parts,
+            mountings=None
+            if options.mountings is None
+            else [asdict(m) for m in options.mountings],
+        )
+        if children is not None:
+            child_evidence = evidence["child"]
+            assert isinstance(child_evidence, dict)
+            child_evidence["available"] = len(children)
+        assert options.rejections is not None
+        evidence.update(
+            compatible_host_endpoints=len(parent_options),
+            returned=len(result),
+            fitted=sum(c.pose is not None for c in result),
+            mounting_rejections=dict(options.rejections),
+        )
+        if not result:
+            if children == ():
+                stopped_at = "incoming_selection_or_occupancy"
+            elif not parent_options:
+                stopped_at = (
+                    "mating_rule"
+                    if children is not None
+                    and not any(
+                        mating_rule(parent.connector.type, child.connector.type)
+                        for parent in parents
+                        for child in children
+                    )
+                    else "mating_or_joint_filter"
+                )
+            elif options.rejections:
+                stopped_at = "mounting"
+            else:
+                stopped_at = "catalog_or_unknown"
+            _empty_search(
+                evidence,
+                stopped_at,
+                "Use lookup_part on both part IDs to inspect their connectors. "
+                "Check endpoint types, available travel, and the requested target rotation, "
+                "then rerun find_connection_candidates with a supported pair and mounting.",
+            )
+    return result
+
+
+def _empty_search(
+    evidence: dict[str, JsonValue], stopped_at: str, next_action: str
+) -> None:
+    evidence.update(
+        code="assembly.no_candidates",
+        message="The query returned no candidates.",
+        stopped_at=stopped_at,
+        next_action=next_action,
+    )
+
+
+def _repeatable_query(
+    query: ConnectorQuery | None,
+) -> ConnectorType | str | tuple[ConnectorType | str, ...] | None:
+    if query is None or isinstance(query, (ConnectorType, str)):
+        return query
+    return tuple(query)
+
+
+def _type_filter_evidence(query: ConnectorQuery | None) -> list[JsonValue] | None:
+    if query is None:
+        return None
+    filters = (query,) if isinstance(query, (ConnectorType, str)) else query
+    return [item.name if isinstance(item, ConnectorType) else item for item in filters]
+
+
+def _vector_evidence(
+    value: Direction | Position | Vec3 | tuple[float, float, float] | None,
+) -> list[JsonValue] | None:
+    if isinstance(value, Direction):
+        value = value.value
+    return None if value is None else [float(v) for v in value]
 
 
 @dataclass(frozen=True)
@@ -438,6 +587,7 @@ class _MountingOptions:
     required_kind: JointKind | None
     opening_toward: Vec3 | None
     opening_point: Position | None
+    rejections: Counter[str] | None = None
 
 
 _ParentOption: TypeAlias = tuple[
@@ -618,6 +768,10 @@ def _mounting_candidates(
         )
     else:
         mountings = options.mountings
+    if not mountings and options.rejections is not None:
+        options.rejections[
+            "slide_range" if options.mountings is None else "mounting_selection"
+        ] += 1
     seen: set[Pose] = set()
     for mounting in mountings:
         try:
@@ -633,7 +787,9 @@ def _mounting_candidates(
             pose = None
         else:
             pose = placement.pose
-            if pose in seen or not _opens_toward(
+            if pose in seen:
+                continue
+            if not _opens_toward(
                 content,
                 pose,
                 target,
@@ -641,6 +797,8 @@ def _mounting_candidates(
                 options.opening_toward,
                 options.opening_point,
             ):
+                if options.rejections is not None:
+                    options.rejections["opening_direction"] += 1
                 continue
             seen.add(pose)
         slide_ranges = _slide_ranges(target, source, parent_mates, child_mates, pose)
@@ -650,6 +808,8 @@ def _mounting_candidates(
                 lo - BUILD_TOLERANCE <= offset <= hi + BUILD_TOLERANCE
                 for lo, hi in _travel_centers(slide_ranges, options.motion)
             ):
+                if options.rejections is not None:
+                    options.rejections["slide_range"] += 1
                 continue
         yield ConnectionCandidate(
             parent,

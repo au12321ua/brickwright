@@ -14,6 +14,7 @@ from ..geometry.connections import (
 from ..geometry.spatial import BUILD_TOLERANCE
 from ..ldraw.meshes import MeshUnavailable
 from ..parts import Element
+from ._assembly_evidence import endpoint_evidence, fitted_evidence, path_evidence
 from .articulation import Joint, MotionRange, MotionReport, record_connection
 from .assembly import (
     _SLIDING,
@@ -26,7 +27,7 @@ from .assembly import (
     _slide_offset,
     _slide_ranges,
 )
-from .placement import Placement, connect_placement, leaf_paths, path_pose
+from .placement import Placement, connect_placement, leaf_paths
 
 if TYPE_CHECKING:
     from pydantic import JsonValue
@@ -203,10 +204,11 @@ def trial_connection(
                 evidence={
                     "count": len(collisions),
                     "examples": [
-                        {"placements": [_path_evidence(staged, paths[p]) for p in pair]}
+                        {"placements": [path_evidence(staged, paths[p]) for p in pair]}
                         for pair in collisions[:3]
                     ],
                     **_candidate_evidence(model, candidate),
+                    **fitted_evidence(candidate, placement.pose),
                 },
                 next_action="Trial another mounting or move the obstructing part.",
             )
@@ -290,42 +292,8 @@ def _candidate_evidence(
     model: LegoBuild, candidate: ConnectionCandidate
 ) -> dict[str, JsonValue]:
     return {
-        "parent": _endpoint_evidence(model, candidate.parent),
-        "child": _endpoint_evidence(candidate.content, candidate.child),
-    }
-
-
-def _endpoint_evidence(
-    content: Element | LegoBuild, endpoint: ConnectionEndpoint
-) -> dict[str, JsonValue]:
-    path = (
-        _path_evidence(content, endpoint.path)
-        if not isinstance(content, Element) and endpoint.path
-        else {}
-    )
-    return {
-        "part_id": endpoint.part_id,
-        **path,
-        "connector": connector_evidence(endpoint.connector),
-    }
-
-
-def _path_evidence(model: LegoBuild, path: _Path) -> dict[str, JsonValue]:
-    labels: list[JsonValue] = []
-    current = model
-    for placement in path:
-        label: str | int | None = current.name_of(placement)
-        if label is None:
-            try:
-                label = current.placements.index(placement)
-            except ValueError:
-                label = "[removed]"
-        labels.append(label)
-        current = placement.content
-    return {
-        "path": labels,
-        "part_id": path[-1].content.ldraw_id,
-        "position": [float(v) for v in path_pose(path).translation],
+        "parent": endpoint_evidence(model, candidate.parent),
+        "child": endpoint_evidence(candidate.content, candidate.child),
     }
 
 
@@ -346,7 +314,7 @@ def _motion_diagnostics(
                     "samples": [
                         {
                             "placements": [
-                                _path_evidence(model, paths[p])
+                                path_evidence(model, paths[p])
                                 for p in failure.placements
                             ],
                             "positions": _position_evidence(model, failure.positions),
@@ -388,7 +356,7 @@ def _motion_diagnostics(
                         {
                             "count": len(failure.placements),
                             "placements": [
-                                _path_evidence(model, paths[p])
+                                path_evidence(model, paths[p])
                                 for p in failure.placements[:4]
                             ],
                             "positions": _position_evidence(model, failure.positions),
@@ -404,11 +372,11 @@ def _motion_diagnostics(
 
 def _joint_evidence(model: LegoBuild, joint: Joint) -> dict[str, JsonValue]:
     return {
-        "parent": _path_evidence(model, joint.parent.path)
+        "parent": path_evidence(model, joint.parent.path)
         | {
             "connector": connector_evidence(joint.parent.connector),
         },
-        "child": _path_evidence(model, joint.child.path)
+        "child": path_evidence(model, joint.child.path)
         | {
             "connector": connector_evidence(joint.child.connector),
         },
