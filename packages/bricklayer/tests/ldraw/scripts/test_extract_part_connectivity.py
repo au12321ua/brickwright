@@ -153,3 +153,25 @@ class TestBuildConnectivity:
         assert connector["axis"] == (0, 0, 1)
         assert connector["side"] == (0, -1, 0)
         assert connector["length"] == 0
+
+    def test_corrects_the_rim_donor_before_transforming_a_derived_id(self):
+        source = PartSource.from_ldraw("7039", [20, 0, 10, 1, 0, 0, 0, 1, 0, 0, 0, 1])
+        assert source is not None
+        labels = {
+            "7039": {
+                "fixed": {"5": {"in": [[0, 0, -2.33335, 90, 0, 180]]}},
+                "bar": {"bar": [[0, 0, 20, -90.0, 0.0, 10]]},
+            }
+        }
+        parts, _ = extract.build_connectivity(
+            labels, {"7039": PartSource("7039"), "497": source}, ["7039", "497"], {}
+        )
+        assert parts["7039"]["connectors"]["fixed_5_in"] == [[0, 0, -2, 90, 0, 180]]
+        assert parts["7039"]["connectors"]["bar_bar"] == [[0, 0, 20, -90.0, 0.0, 10]]
+        fixed = next(
+            row for row in parts["497"]["connectors"] if row["type"] == "fixed_5_in"
+        )
+        assert fixed["pos"] == pytest.approx((20, 0, 8))
+        assert parts["497"]["_source"] == "7039"
+        assert "parts/497a.dat" in parts["497"]["_note"]
+        assert labels["7039"]["fixed"]["5"]["in"][0][2] == -2.33335

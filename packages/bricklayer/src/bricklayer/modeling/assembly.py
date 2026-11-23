@@ -56,7 +56,7 @@ from ..geometry.connections import (
     mating_rule,
     same_connector,
 )
-from ..geometry.linalg import dot, is_aligned, is_unit
+from ..geometry.linalg import dot, is_aligned, is_opposing, is_unit
 from ..geometry.spatial import BUILD_TOLERANCE, as_position
 from ..ldraw import partdata
 from ..parts import Element
@@ -616,8 +616,46 @@ def _ranked_candidates(
             )
         else:
             assert children is not None
+            if (
+                intent is None
+                and options.target_rotation is not None
+                and options.target_position is None
+                and options.mountings is None
+            ):
+                parents = _prefer_hinges(parents, children, options.target_rotation)
             groups = ((content, children),)
         yield from _model_candidates(parents, groups, options)
+
+
+def _prefer_hinges(
+    parents: tuple[_ParentOption, ...],
+    children: tuple[ConnectionEndpoint, ...],
+    target_rotation: Mat3 | Rotation,
+) -> tuple[_ParentOption, ...]:
+    """Prefer a dedicated hinge that can follow the requested orientation."""
+    rotation = (
+        target_rotation.matrix
+        if isinstance(target_rotation, Rotation)
+        else target_rotation
+    )
+    axes = tuple(
+        (child.connector.type, rotation @ child.connector.axis)
+        for child in children
+        if child.connector.type.family == "hinge"
+    )
+    if not axes or len(parents) < 2:
+        return parents
+
+    def uses_hinge(option: _ParentOption) -> bool:
+        parent, _, partners = option
+        connector = parent.connector
+        return connector.type.family == "hinge" and any(
+            partners.get(child_type) is JointKind.REVOLUTE
+            and (is_aligned(connector.axis, axis) or is_opposing(connector.axis, axis))
+            for child_type, axis in axes
+        )
+
+    return tuple(sorted(parents, key=lambda option: not uses_hinge(option)))
 
 
 def _registered_candidates(

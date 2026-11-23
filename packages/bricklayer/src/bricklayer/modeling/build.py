@@ -406,7 +406,9 @@ class LegoBuild(Cached, LegoGeometry):
         to `part_ids`. Use `intent`, endpoint types, or `joint_kind` to narrow
         the interfaces. `facing` and `toward` select host endpoints in this
         model's frame. Applicable catalog-verified poses rank first within the
-        selected endpoints. Other candidates use quarter-turn clocking where
+        selected endpoints. For known content with only an orientation target,
+        matching hinge axes get priority over incidental endpoints. Other
+        candidates use quarter-turn clocking where
         permitted, try both axis directions for revolute mounts without a requested
         rotation, and seat sliding pairs within spans that fit the requested travel.
 
