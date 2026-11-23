@@ -1,3 +1,4 @@
+import json
 from types import SimpleNamespace
 
 from brickwright.driver import tracking
@@ -96,12 +97,17 @@ def test_bound_openai_transport_attaches_only_the_named_key_and_disallows_redire
     import litellm
     import pytest
 
+    from brickwright.driver.completion import litellm_complete
+
     key_file = tmp_path / "key"
     key_file.write_text("named-test-token")
     monkeypatch.setenv("OPENAI_API_KEY", "ambient-test-token")
     endpoint = "https://provider.example/v1"
     original_client = httpx.Client
+    original_completion = litellm.completion
     urls = []
+    delays = []
+    monkeypatch.setattr(p001_native, "sleep", delays.append, raising=False)
 
     def client(**kwargs):
         assert kwargs["trust_env"] is False
@@ -110,6 +116,15 @@ def test_bound_openai_transport_attaches_only_the_named_key_and_disallows_redire
         def send(request):
             urls.append(str(request.url))
             assert request.headers["authorization"] == "Bearer named-test-token"
+            request_data = json.loads(request.content)
+            assert request_data["reasoning"]["effort"] == "medium"
+            assert request_data["tools"][0]["name"] == "recheck_build"
+            if len(urls) == 1:
+                return httpx.Response(
+                    429,
+                    headers={"Retry-After": "2"},
+                    json={"error": {"type": "rate_limit_exceeded"}},
+                )
             return httpx.Response(
                 307, headers={"Location": "https://other.example/redirect"}
             )
@@ -121,8 +136,22 @@ def test_bound_openai_transport_attaches_only_the_named_key_and_disallows_redire
         p001_native._bound_responses(endpoint, key_file),
         pytest.raises(RuntimeError, match="Bound Responses request failed"),
     ):
-        litellm.completion(
-            model="openai/responses/gpt-6.2-sol",
+        litellm_complete()(
+            model="openai/gpt-6.2-sol",
+            reasoning_effort="medium",
+            timeout=120,
             messages=[{"role": "user", "content": "Test."}],
+            tools=[
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "recheck_build",
+                        "parameters": {"type": "object", "properties": {}},
+                    },
+                }
+            ],
+            tool_choice="auto",
         )
-    assert urls == [f"{endpoint}/responses"]
+    assert urls == [f"{endpoint}/responses"] * 2
+    assert delays == [2.0]
+    assert litellm.completion is original_completion
