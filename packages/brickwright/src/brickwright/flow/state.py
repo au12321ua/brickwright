@@ -22,7 +22,7 @@ from .artifacts import (
     read_conditions,
 )
 from .integrations import merge_state, review_status
-from .structure import StructureReport
+from .structure import StructureReport, catalog_sha256, sdk_version
 
 if TYPE_CHECKING:
     from brickwright.record import Record
@@ -33,6 +33,8 @@ class StructureInputs(BaseModel):
     source_sha256: str
     plan_sha256: str | None
     manifest_sha256: str | None
+    catalog_sha256: str
+    sdk_version: str
 
     @classmethod
     def capture(cls, record: Record, source_sha256: str) -> StructureInputs:
@@ -40,6 +42,8 @@ class StructureInputs(BaseModel):
             source_sha256=source_sha256,
             plan_sha256=file_sha256(record.path / "plan.json"),
             manifest_sha256=file_sha256(record.path / "merge-manifest.json"),
+            catalog_sha256=catalog_sha256(),
+            sdk_version=sdk_version(),
         )
 
     def current(self, record: Record) -> bool:
