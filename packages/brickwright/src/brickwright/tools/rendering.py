@@ -291,6 +291,17 @@ def _save_png(image: np.ndarray, path: Path) -> None:
     Image.fromarray(image, "RGBA").convert("RGB").save(path)
 
 
+def lit_scene(glb_path: Path, camera):
+    """Load the model and apply the common ambient and camera-aligned lighting."""
+    import pygfx as gfx
+
+    model = gfx.load_gltf(str(glb_path), remote_ok=False).scene
+    scene = gfx.Scene()
+    scene.add(model, gfx.AmbientLight(intensity=0.6), camera)
+    camera.add(gfx.DirectionalLight(intensity=2.5))
+    return model, scene
+
+
 def _build_scene(glb_path: Path, size: int):
     """Load the glTF and set up the scene, camera, and canvas for rendering.
 
@@ -301,17 +312,10 @@ def _build_scene(glb_path: Path, size: int):
     import pygfx as gfx
     from rendercanvas.offscreen import RenderCanvas
 
-    model = gfx.load_gltf(str(glb_path)).scene
-
-    scene = gfx.Scene()
-    scene.add(gfx.AmbientLight(intensity=0.6))
-    scene.add(model)
-
+    camera = gfx.PerspectiveCamera(50)
+    model, scene = lit_scene(glb_path, camera)
     canvas = RenderCanvas(size=(size, size), pixel_ratio=1)
     renderer = gfx.renderers.WgpuRenderer(canvas)
-    camera = gfx.PerspectiveCamera(50)
-    camera.add(gfx.DirectionalLight(intensity=2.5))  # key light follows the camera
-    scene.add(camera)
 
     canvas.request_draw(lambda: renderer.render(scene, camera))
     return model, camera, canvas
