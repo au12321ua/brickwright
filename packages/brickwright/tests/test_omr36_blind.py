@@ -95,3 +95,48 @@ def test_missing_trial_does_not_enter_blinded_packet(tmp_path, monkeypatch):
     with pytest.raises(ValueError, match="score"):
         blind.prepare(inputs, old, new, output)
     assert not output.exists()
+
+
+def test_blind_uses_selected_scored_attempt_and_neutral_structure(
+    tmp_path, monkeypatch
+):
+    inputs, old, new, output = make_inputs(tmp_path, monkeypatch)
+    structures = tmp_path / "structure"
+    for name, arm in (("baseline", old), ("candidate", new)):
+        rows = []
+        for n in (1, 2):
+            relative = f"tasks/R-example/trial-{n}/attempt-1"
+            report = arm / relative / "verifier" / "score-details.json"
+            rows.append(
+                {
+                    "task_id": "R-example",
+                    "trial_index": n,
+                    "state": "scored",
+                    "score": 0.5,
+                    "attempt_path": relative,
+                    "score_details_sha256": blind._digest(report),
+                }
+            )
+            sidecar = structures / name / "R-example" / f"trial-{n}.json"
+            sidecar.parent.mkdir(parents=True, exist_ok=True)
+            dump(
+                sidecar,
+                {
+                    "private_note": "builder-history-secret",
+                    "blind": {
+                        "analysis": "complete",
+                        "component_count": 1,
+                        "contact_only_count": 0,
+                    },
+                },
+            )
+        dump(arm / "index.json", {"state": "finished", "trials": rows})
+    # A later attempt directory is retained in the archive but never selected by Maestro.
+    (new / "tasks/R-example/trial-1/attempt-2").mkdir()
+    blind.prepare(inputs, old, new, output, structure=structures)
+    assert len(list((output / "review").glob("*/structure.json"))) == 4
+    assert "builder-history-secret" not in (output / "review/index.html").read_text()
+    assert (
+        "component_count"
+        in next((output / "review").glob("*/structure.json")).read_text()
+    )

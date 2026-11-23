@@ -57,7 +57,32 @@ def _image(source: Path, destination: Path) -> None:
 
 
 def _archive_report(root: Path, task: str, trial: int) -> Path:
+    index_path = root / "index.json"
     folder = root / "tasks" / task / f"trial-{trial}"
+    if index_path.is_file():
+        index = _read(index_path)
+        rows = [
+            r
+            for r in index["trials"]
+            if r["task_id"] == task and r["trial_index"] == trial
+        ]
+        if len(rows) != 1 or rows[0].get("state") != "scored":
+            raise ValueError(
+                f"No unique scored platform verdict for {task} trial {trial}"
+            )
+        row = rows[0]
+        attempt = root / row["attempt_path"]
+        if attempt.resolve().parent != folder.resolve():
+            raise ValueError("Selected trial does not match its archive path.")
+        report = attempt / "verifier" / "score-details.json"
+        if (
+            _digest(report) != row.get("score_details_sha256")
+            or _read(report)["score"] != row["score"]
+        ):
+            raise ValueError(
+                "Platform index does not match the selected verifier score."
+            )
+        return report
     attempts = sorted(
         folder.glob("attempt-*"), key=lambda path: int(path.name.split("-")[-1])
     )
@@ -120,6 +145,7 @@ def prepare(
     candidate: Path,
     output: Path,
     bus_modules: Path | None = None,
+    structure: Path | None = None,
 ) -> None:
     """Create one anonymous item per trial. Keep the key outside the review directory."""
     if baseline.resolve() == candidate.resolve():
@@ -190,6 +216,13 @@ def prepare(
                             + "</div>"
                         )
                     body = "".join(views) or "<p>无通过交付检查的成品图。</p>"
+                    if structure is not None:
+                        label = "bus-modular" if arm == "bus_modules" else arm
+                        sidecar = structure / label / task / f"trial-{n}.json"
+                        neutral = _read(sidecar)["blind"]
+                        _write(folder / "structure.json", neutral)
+                        key[ident]["structure_source_sha256"] = _digest(sidecar)
+                        body += f'<p><a href="{ident}/structure.json">标准目录结构复查</a></p>'
                     checks = "".join(f"<li>{html.escape(c)}</li>" for c in conditions)
                     cards.append(
                         (
@@ -310,6 +343,11 @@ def main() -> None:
     for name in ("inputs", "baseline", "candidate", "output"):
         new.add_argument("--" + name, type=Path, required=True)
     new.add_argument("--bus-modules", type=Path)
+    new.add_argument(
+        "--structure",
+        type=Path,
+        help="common offline structure analysis for each sealed platform trial",
+    )
     jet = commands.add_parser("jet")
     for name in ("goals", "before", "after", "output"):
         jet.add_argument("--" + name, type=Path, required=True)
