@@ -1,6 +1,6 @@
-Use `dispatch_subagents` to run independent subtasks in parallel. Each task you list is handled by its own subagent
-working in an isolated build; each returns its answer to you as text, which you then integrate yourself (subagents do
-not change your build). Reach for it when you can split the work into pieces describable on their own—e.g. designing
-separate components, or investigating the catalog while you keep building. Per task, you may set `tier`: `fast`
-(cheapest, for simple work), `balanced`, or `smart` (most capable). Omit `tier` to use your own model. Prefer using
-`balanced` or `fast` unless the task is genuinely difficult.
+Use `dispatch_subagents` for independent work. Each scratch worker returns text for you to integrate.
+When the current plan declares modules, set a task's `module` to a module ID. Give the worker its
+building brief. It edits and validates its own module record and returns the finalized snapshot.
+You can place those snapshots with `place_module(build, module_id)` in the parent build.
+
+Per task, you may set `tier` to `fast`, `balanced`, or `smart`. Omit it to use your own model.
