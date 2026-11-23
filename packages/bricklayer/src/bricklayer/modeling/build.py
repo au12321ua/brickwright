@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from bisect import insort
 from collections import Counter
-from collections.abc import Callable, Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence, Sized
 from copy import deepcopy
 from functools import cached_property, wraps
 from itertools import islice, pairwise
 from threading import RLock
-from typing import Any, ParamSpec, TypeAlias, TypeVar, cast
+from typing import TYPE_CHECKING, Any, ParamSpec, TypeAlias, TypeVar, cast
 from weakref import WeakKeyDictionary
 
 from .._mixins import Cached
@@ -36,6 +36,7 @@ from ..geometry.linalg import Scalar, format_scalar, vec_max, vec_min
 from ..geometry.spatial import BUILD_TOLERANCE
 from ..geometry.support import supporting_pairs
 from ..parts.element import Element
+from ._assembly_evidence import record_trial_batch
 from ._assembly_trials import trial_connection
 from ._graph import component_roots
 from .articulation import (
@@ -62,6 +63,9 @@ from .assembly import (
 )
 from .names import NameRegistry
 from .placement import Placement, connect_placement, grid_placement, leaf_paths
+
+if TYPE_CHECKING:
+    from pydantic import JsonValue
 
 #: The content type re-posed by :meth:`LegoBuild._compose`, shared between the
 #: placement it is given and the placement it returns.
@@ -394,6 +398,7 @@ class LegoBuild(Cached, LegoGeometry):
         opening_toward: Direction | Vec3 | None = None,
         opening_point: Position | tuple[float, float, float] | None = None,
         limit: int = 20,
+        evidence: dict[str, JsonValue] | None = None,
     ) -> tuple[ConnectionCandidate, ...]:
         """Find candidate mounting poses for a placed part or sub-model.
 
@@ -412,6 +417,10 @@ class LegoBuild(Cached, LegoGeometry):
         rest to `motion.upper` (or `motion.lower` if the upper bound is zero).
         `trial_connections` checks colliding placements and any motion. It also
         reports the actual joint kind when the geometry constrains its movement.
+
+        Pass an `evidence` dictionary to collect the search budget, endpoint
+        examples, applied filters and an explanation when the result is empty.
+        This replaces its contents. Candidate ordering and limits stay the same.
         """
         return find_connection_candidates(
             self,
@@ -432,6 +441,7 @@ class LegoBuild(Cached, LegoGeometry):
             opening_toward=opening_toward,
             opening_point=opening_point,
             limit=limit,
+            evidence=evidence,
         )
 
     def trial_connections(
@@ -441,6 +451,7 @@ class LegoBuild(Cached, LegoGeometry):
         limit: int = 8,
         samples: int = 5,
         max_samples: int = 10000,
+        evidence: dict[str, JsonValue] | None = None,
     ) -> tuple[ConnectionTrial, ...]:
         """Check a bounded number of candidates independently against this build.
 
@@ -448,6 +459,10 @@ class LegoBuild(Cached, LegoGeometry):
         Each trial checks endpoint liveness, mating, and collisions involving
         the proposed content. If the resulting build has annotated motion,
         check the sampled poses with `check_motion`. The build is unchanged.
+
+        Pass an `evidence` dictionary to replace its contents with the budget, checks
+        and rejected candidates. The offered count is unknown for unsized
+        iterables and the summary never pulls additional candidates from them.
         """
         _check_limit(limit)
         trials = []
@@ -457,7 +472,17 @@ class LegoBuild(Cached, LegoGeometry):
                     self, candidate, samples=samples, max_samples=max_samples
                 )
             trials.append(trial)
-        return tuple(trials)
+        result = tuple(trials)
+        if evidence is not None:
+            record_trial_batch(
+                evidence,
+                result,
+                offered=len(candidates) if isinstance(candidates, Sized) else None,
+                limit=limit,
+                samples=samples,
+                max_samples=max_samples,
+            )
+        return result
 
     @_serialized_edit
     def place_connection(
