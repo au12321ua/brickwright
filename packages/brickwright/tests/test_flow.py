@@ -240,3 +240,64 @@ def test_standard_reread_reports_unrepresentable_geometry():
     assert not report.passed and not report.complete
     assert standard.part_count == 0
     assert any(issue.code == "structure.incomplete" for issue in report.diagnostics)
+
+
+def test_declared_independent_object_can_be_larger_than_the_primary(
+    tmp_path, in_process
+):
+    record = _record(tmp_path)
+    _ready(record)
+    record.write_build(
+        STACK.replace("(0, 0, 1)", "(6, 0, 0)").replace(
+            "    return build",
+            '    build.add(Element("3001", Color.RED), (6, 0, 1))\n    return build',
+        )
+    )
+    result = validate(record)
+    assert result.structure is not None and result.structure.native is not None
+    column = result.structure.native
+    accessory = max(column.components, key=lambda component: component.part_count)
+    members = [
+        column.instances[index].model_dump(mode="json", exclude={"color_id", "path"})
+        for index in accessory.members
+    ]
+    plan = dict(
+        PLAN,
+        independent_objects=[
+            {"id": "accessory", "purpose": "Park separately.", "members": members}
+        ],
+    )
+    assert set_artifact(record, "plan", plan)["diagnostics"] == []
+    result = validate(record)
+    assert result.flow is not None and result.flow["structural_passed"]
+
+
+def test_catalog_revision_expires_the_current_structure(
+    tmp_path, monkeypatch, in_process
+):
+    from brickwright.flow import state
+
+    record = _record(tmp_path)
+    _ready(record)
+    assert validate(record).ok
+    assert flow_status(record)["structural_passed"]
+    monkeypatch.setattr(state, "catalog_sha256", lambda: "different catalog")
+    assert not flow_status(record)["structural_passed"]
+
+
+def test_validation_binds_module_motion_to_child_checks(
+    config, monkeypatch, in_process
+):
+    from brickwright.tools import validation
+
+    record = Record.create(config)
+    record.write_build(STACK)
+    motion = {"joints": [{"axis": "test"}]}
+    monkeypatch.setattr(validation, "check_module", lambda *_: ("contract", []))
+    monkeypatch.setattr(validation, "capture_module_motion", lambda *_: motion)
+
+    report = validate(record)
+    assert report.ok and report.module_motion == motion
+    assert report.module_mpd_sha256
+    assert json.loads(record.snapshots[-1].read_report())["module_motion"] == motion
+    assert json.loads(report.agent_json()) == report.model_dump(mode="json")

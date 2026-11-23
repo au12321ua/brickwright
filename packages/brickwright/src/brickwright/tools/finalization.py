@@ -33,12 +33,13 @@ class FinalizationReport(DiagnosticReport):
 
     def agent_json(self, indent: int | None = None) -> str:
         """Serialize finalization status and a bounded view of the validation report."""
+        if self.flow is None:
+            return self.model_dump_json(indent=indent)
         data = self.model_dump(mode="json", exclude={"flow", "validation"})
         data["validation"] = (
             self.validation.agent_payload() if self.validation else None
         )
-        if self.flow is not None:
-            data["flow"] = summarize_flow(self.flow)
+        data["flow"] = summarize_flow(self.flow)
         return json.dumps(data, indent=indent, ensure_ascii=False)
 
 
