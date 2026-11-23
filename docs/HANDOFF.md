@@ -15,6 +15,14 @@
 
 修改模型校验或产物时，同时查看 [验证与导出设计](design/validation-and-export.md)。
 
+## 下一阶段：代理搭建流程演示
+
+[总设计](design/agent-build-flow.md)以 OMR36 从零版第二版六题演示理解、规划、搭建、结构检查、外观评审和交付。594effd 基线每题一次，六题通过平台交付，标准目录重读最终 MPD 均零碰撞、零悬空。四题连成一体，小屋 8 个组件、巴士 5 个。六题均尝试题目机位对照，五题打印过独立评审说明，实际派发为零。[基线运行](http://localhost:8420/runs/run_01m834xe645ngv8jjcmc40svmx)
+
+P-004 至 P-006 已接受，待实施，分别用小屋与巴士检验结构归因、用喷气机检验独立外观返修、用巴士两组检验模块接口和并行成本。已接受的 [P-007](proposals/P-007-official-reference-assemblies.md)已复核 101 个官方轮组文件的基线；等价位姿逐例判定、误接反例、成类修正及全量筛查属于待实施验收。完整范围见[提案索引](proposals/README.md)。
+
+两项验收取舍已确认。事先声明可简化的装饰接口，在具体缺项有证据且两栏结构检查通过时可带限制交付。六题按整组检验交付、平台分和原始条件满足数不退步，喷气机用同机位盲评展示局部改善。[U-09](decisions.md#u-09--有证据的装饰接口缺项可带限制放行) · [U-10](decisions.md#u-10--六题整体不退步并展示局部改善)
+
 ## 连接装配、知识查询和零件覆盖
 
 - 从搭建意图查件可用 `bricklayer.find_connection_pairs`。已有模型可用 `find_connection_candidates` 查安装姿态，`trial_connections` 试装，`place_connection` 提交。内置代理和外部代理可收到同一组执行原因码、现场证据和修复建议。[连接驱动装配提案](proposals/P-001-connection-driven-building.md)
