@@ -792,6 +792,35 @@ class LegoBuild(Cached, LegoGeometry):
         return tuple(leaf for i, leaf in enumerate(leaves) if roots[i] not in supported)
 
     @cached_property
+    def mated_placement_pairs(
+        self,
+    ) -> tuple[tuple[Placement[Element], Placement[Element]], ...]:
+        """Exact pairs of flattened parts that share a mated connector."""
+        leaves = self.flattened_placements
+        return tuple((leaves[i], leaves[j]) for i, j in self._mating.pairs)
+
+    @cached_property
+    def component_contact_pairs(
+        self,
+    ) -> tuple[tuple[Placement[Element], Placement[Element]], ...]:
+        """Surface contact between separate components, supporting part first."""
+        leaves = self.flattened_placements
+        return tuple((leaves[i], leaves[j]) for i, j in self._support_edges)
+
+    @cached_property
+    def contact_only_placements(self) -> tuple[Placement[Element], ...]:
+        """Elevated parts with direct support contact and no mated connectors."""
+        mated_leaves = {leaf for pair in self.mated_placement_pairs for leaf in pair}
+        resting = {leaf for _, leaf in self.component_contact_pairs}
+        return tuple(
+            leaf
+            for leaf in self.flattened_placements
+            if leaf in resting
+            and leaf not in mated_leaves
+            and not _is_grounded(leaf, self._ground)
+        )
+
+    @cached_property
     def connected_components(self) -> tuple[tuple[Placement[Element], ...], ...]:
         """The placements grouped by connected component.
 
