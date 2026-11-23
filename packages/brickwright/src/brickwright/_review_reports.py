@@ -99,12 +99,17 @@ class FailedReport(ReviewModel):
     failure_reason: Nonempty
 
 
+FIXED_GUIDANCE = """Open the target and candidate for every view, then use the metrics and overlays
+to locate differences. The overlays mark target-only pixels in orange,
+candidate-only pixels in blue, and RGB differences in magenta. Scores help
+locate differences. Decide from the task and the target images."""
+
+MATCHED_GUIDANCE = """Open the target and candidate. The viewpoint was matched approximately.
+Judge from the images and the task. Give all evidence boxes in the reference image's coordinate system."""
+
 REVIEW_GUIDANCE = """Use this round's manifest and frozen files to compare the candidate with the target.
-Open the target and candidate for every view, then use the metrics and overlays to
-locate differences. The overlays mark target-only pixels in orange, candidate-only
-pixels in blue, and RGB differences in magenta. Pixel coordinates start at the
-top left. Each box is [left, top, right, bottom] with right and bottom excluded.
-Scores help locate differences. Decide from the task and the target images.
+Pixel coordinates start at the top left. Each box is [left, top, right, bottom]
+with right and bottom excluded.
 
 Review the original conditions first, then every feature. For a condition
 requiring internal structural evidence, use structural_evidence_required and
