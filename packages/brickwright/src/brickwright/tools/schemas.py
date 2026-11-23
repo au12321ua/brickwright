@@ -148,6 +148,10 @@ class SubagentTask(ToolArgs):
     """One unit of work to hand to a subagent."""
 
     prompt: str = Field(description="Self-contained instructions for one subagent.")
+    module: str | None = Field(
+        default=None,
+        description="A planned module ID. The worker builds and finalizes that module record.",
+    )
     tier: str | None = Field(
         default=None,
         description="Model tier: 'fast' is cheapest/quickest, 'smart' is most capable, 'balanced' is in between. Omit to use the main model.",
@@ -168,12 +172,10 @@ class SubagentTask(ToolArgs):
 
 class DispatchArgs(ToolArgs):
     """Run independent subtasks in parallel. Each subagent works in its own isolated build
-    with the same tools you have (except this one), and returns its answer to you as
-    text. Subagents do not touch `build.py`; you must integrate the returned text
-    yourself. Each result reports `ok` (it handed work back) separately from `valid`
-    (its own last validation passed) plus `failed_checks`: a subagent can run out of
-    budget and return work that is still broken, so read `valid` before you integrate,
-    and repair what came back broken."""
+    with the same tools you have (except this one). A scratch task returns text
+    for you to integrate. A task with a module ID finalizes its own module record
+    and returns a checked snapshot you can place with place_module. Check `valid`
+    and `failed_checks` to identify work a subagent could not finish."""
 
     tasks: list[SubagentTask] = Field(
         min_length=1, description="The subtasks to run in parallel."
