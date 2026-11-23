@@ -22,3 +22,11 @@ python docs/design/omr36-evaluation/maestro.py collect "$EVAL" baseline candidat
 [Maestro 控制组](http://localhost:8420/runs/run_01m83dmfcd9vztwkpv59j8mcde) 的验证器得 1.0。父会话调用 `spawn_agent` 和 `wait_agent`。子会话的原始日志直接绑定父 ID，记录 `gpt-6.2-sol`、medium 和 Codex 0.170.0。一个 `view_image` 批次返回了主侧视及端视的目标与成品共四幅图。评阅者自行定位主侧视双尾翼的阶梯前缘，并以端视核对表面差异和两件模型都具备的外倾。对图上方框的裁切复核确认了主侧视差异。[会话、用量与证据摘要](control-evidence.json)
 
 Harbor 的原始试次用量在这次派发控制中只对应最后的子会话。主代理和子代理的实际用量分别按各自 Codex 日志里的最后一个非空累积计数读取。所有视图判断还需要回查原始读图记录和回执，单纯打印评审说明无法证明已派发。
+
+## 正式运行与校准
+
+[配对基线](http://localhost:8420/runs/run_01m83css5zw7djn5rscdvfhrcv)和[新版](http://localhost:8420/runs/run_01m83gg16jhczmh0y1vd54eccd)各锁定 12 个试次。解析后的配置只在产品附件字段有差异。用 `e88513e` 构建的两份 wheel 通过本机 CLI 启动检查，并在原勃兰登堡门题的 Oracle 检查得到 1.0。[版本、配置和产物摘要](run-bindings.json) · [Oracle 复核](http://localhost:8420/runs/run_01m83ge5vvpd991wby9vpffmgf)
+
+候选渲染校准覆盖 30 个同机位视图。两项存量 PNG 指标均精确复算，参考重渲染指标最小值为 1.0，基线重渲染指标最大绝对差为 `0.000009870499052433424`。
+
+归档结构返修计数使用顺序校验报告，统计校验失败后已检查的新源码或流程快照。同一快照的重复检查只保留为检查次数。外观返修计数使用相邻有效评审的结构快照变化。完整归档还保留报告状态、失败尝试和无修复的重新评审。

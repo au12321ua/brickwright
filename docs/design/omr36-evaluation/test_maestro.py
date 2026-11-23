@@ -3,7 +3,14 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from zipfile import ZipFile
 
-from maestro import PROTOCOL, comparison_request, extract_run, session_usage, trial_row
+from maestro import (
+    PROTOCOL,
+    comparison_request,
+    extract_run,
+    session_usage,
+    structural_repairs,
+    trial_row,
+)
 
 
 class EvaluationTest(unittest.TestCase):
@@ -41,6 +48,23 @@ class EvaluationTest(unittest.TestCase):
             extract_run(source, root)
             self.assertTrue((root / "manifest.json").exists())
             self.assertTrue((root / "tasks/R-10258/result.json").exists())
+
+    def test_structural_repair_requires_checking_a_new_snapshot(self):
+        checks = [
+            {"source_sha256": "a", "ok": False},
+            {"source_sha256": "a", "ok": False},
+            {
+                "source_sha256": "b",
+                "ok": True,
+                "flow": {"snapshot_id": "initial", "structural_passed": False},
+            },
+            {
+                "source_sha256": "b",
+                "ok": True,
+                "flow": {"snapshot_id": "repaired", "structural_passed": True},
+            },
+        ]
+        self.assertEqual(structural_repairs(checks), 2)
 
     def test_unscored_is_not_zero_and_invalid_is_a_real_zero(self):
         trial = {

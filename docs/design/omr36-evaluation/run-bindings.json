@@ -1,0 +1,98 @@
+{
+  "dataset": {
+    "name": "omr36-brickwright",
+    "namespace": "team",
+    "resolved_digest": "sha256:f238a95481db61785a052789abdc68e7135c15a980d7ab078cbab0ee745a920f",
+    "source_kind": "upload",
+    "version_id": "dsv_01m834wmk35cyyah534q8f1q9m"
+  },
+  "harness": {
+    "id": "hrn_01m7pe82cznhja9rnc3xsqesc5",
+    "digest": "sha256:6291c29e56568c002e33e93dc0ecebff75b75fcb217b4113799f00f0cb11531b",
+    "version": "0.170.0"
+  },
+  "model": {
+    "id": "gpt-6.2-sol",
+    "config": "mdl_01m7pe5273yz36vbxcmfjrzjr6",
+    "revision": 3,
+    "effort": "medium"
+  },
+  "shared_attachment": {
+    "id": "att_01m83cq34kax4zhsrd25gsc024",
+    "digest": "sha256:adefab9d13b10acd0fd58e5a59274c8b9f12cf637794a966200c1f270b7586d6"
+  },
+  "baseline_attachment": {
+    "id": "att_01m834wzec6bcyshnascbexbg4",
+    "digest": "sha256:a225e3f001918cc720bf04784ba8f2032142309a539b178c7873733ed27ba0d5"
+  },
+  "candidate_attachment": {
+    "id": "att_01m83ge5vdf8tet7ed1p17ankv",
+    "digest": "sha256:f7b8b3d3b612e4522975e45f2ff1edc3e1e827a4c2ca4eacce67e53478d29a03",
+    "revision": "e88513e039c327464ec11a60fd76cc3e6f352900",
+    "binding": {
+      "revision": "e88513e039c327464ec11a60fd76cc3e6f352900",
+      "uv_lock_sha256": "0e2e787a13d32980702cbc541828858a896cce4c78d2315474adc83babb138e6",
+      "wheel_sha256": {
+        "bricklayer_sdk-0.1.0-py3-none-any.whl": "3567c88d5a740317ae69fc142a90582c4bd0435c0e0bc35d71529d756c179965",
+        "brickwright-0.1.0-py3-none-any.whl": "89535433f7ed2d7d02432cd4ccadb01329e8a0f6b6ef2bd11d1a957be49e3889"
+      }
+    },
+    "calibration_sha256": "b7cb0fc2431331b152ca85475033a6d15519302353e2467b7422bb71f8c04849"
+  },
+  "candidate_oracle": {
+    "run": "run_01m83ge5vvpd991wby9vpffmgf",
+    "operation": "op_01m83ge5vvhrb6xmvcy4qswd1k",
+    "config_digest": "sha256:873d9ee1fdd00f22ab2b1002a017601d186b896d67d3782420de003589d2c8ee",
+    "attachment": "att_01m83ge5vdf8tet7ed1p17ankv",
+    "score": 1.0,
+    "delivered": true
+  },
+  "runs": {
+    "baseline": {
+      "run": "run_01m83css5zw7djn5rscdvfhrcv",
+      "operation": "op_01m83css5z34w675yaj35ym11a",
+      "config_digest": "sha256:1b9285cd345099e9f5df19f04d53c34dc2ffe0435b2102c40a5c05381004e30a",
+      "planned_trials": 12
+    },
+    "candidate": {
+      "run": "run_01m83gg16jhczmh0y1vd54eccd",
+      "operation": "op_01m83gg16j1xbebd095hpq1vst",
+      "config_digest": "sha256:061a5da0fe1982a6c787bd0d49446b964934bbe6210a8a005239867a57e1952f",
+      "planned_trials": 12
+    }
+  },
+  "resolved_effective_configs_equal_except_product_attachment": true,
+  "renderer_calibration": {
+    "archive_sha256": "b7cb0fc2431331b152ca85475033a6d15519302353e2467b7422bb71f8c04849",
+    "views": 30,
+    "archive_max_delta": 0.0,
+    "reference_min": 1.0,
+    "baseline_max_delta": 9.870499052433424e-06,
+    "versions": {
+      "ldraw2mesh": "0.1.1",
+      "pygfx": "0.17.0",
+      "wgpu": "0.32.0",
+      "rendercanvas": "2.7.2",
+      "numpy": "2.5.4",
+      "pillow": "13.0.0"
+    },
+    "adapter": "llvmpipe (LLVM 20.1.2, 256 bits)",
+    "library_colors_sha256": "d3490047460ad7a511b150006b009830fc52ecc1899b514c7380e9de644b3cfb"
+  },
+  "bus_modular": {
+    "run": "run_01m83gpbjev9xj0zyq89nt7cvn",
+    "operation": "op_01m83gpbje9yqws88gn1sr5kmt",
+    "config_digest": "sha256:b4b38115c62ecada1eca9ae17976dd2a1979341ca1d047397e7148046a69a938",
+    "planned_trials": 2,
+    "mode_attachment": {
+      "id": "att_01m83gpbhwndxwbmdrc9x6zg8v",
+      "digest": "sha256:d8720396536b76b3e41a9a281d7878631eecb58544c86502775d0d4bc9aa1ebb"
+    },
+    "same_resolved_r10258_settings_as_candidate": true
+  },
+  "jet_replay": {
+    "run": "run_01m83gj0p56pj4yyxk6zg2wt0w",
+    "dataset": "dsv_01m83ed0x6ww28w6a4jm9a1409",
+    "purpose": "Paired same-view repair demonstration starting from archived R-31039 source."
+  }
+}
