@@ -122,10 +122,15 @@ and lists any unresolved condition as a remaining item that prevents the round
 from passing.
 Apply simplified only when the corresponding feature explicitly records a
 simplification and the candidate follows it.
-Report additional visible discrepancies in findings. Give the original check ID
-when relevant, otherwise cite the target view and region only. Flag a finding as
+Report additional visible discrepancies in findings, including differences in
+colour regions, markings and proportions. Give the original check ID when
+relevant, otherwise cite the target view and region only. Flag a finding as
 required when it must be addressed to satisfy the task or keep an essential
-feature. Include observable evidence and a practical repair for each open item.
+feature, or when it changes a view's outline, colour layout or proportions and
+the builder can still repair it with the allowed parts. Leave such a finding
+unrequired only when the parts, piece limit or connections prevent a closer
+match, and state in the repair why. Include observable evidence and a practical
+repair for each open item.
 Return passed only if all other original conditions are satisfied, all required
 features are retained or have the agreed simplification, and no required
 finding remains. Review the supplied images and task files only. Return the

@@ -34,7 +34,7 @@ workflow 接口和外部 CLI 在失败报告的 `diagnostics` 中给出原因码
 
 `status` 与各命令的兜底都取同一个首选动作：依次为特征、规划、写模型并验证、按机位渲染、对比、准备评审轮次、填写回执、定稿和交付核对。`build.py` 仍是模板时先要求写模型；渲染或对比已经过期时，复用上次的机位文件和参考目录；评审已被采纳但需要修改且轮数未用尽时，要求返工。`init` 为流程记录写出 `drafts/features.json` 和 `drafts/plan.json`，特征草稿按原题条件逐条列出。[首选动作](../../packages/brickwright/src/brickwright/flow/guide.py) · [恢复回归](../../packages/brickwright/tests/test_recovery.py)
 
-`review-instructions` 在轮次目录写出 `instructions.md` 和预填的 `report.json`，返回包目录和两份文件的路径。`review --set` 的结果分三层：`receipt` 为 `accepted`、`stale` 或 `failed`，`counted` 与 `rounds` 说明是否计入轮数及剩余轮数，`deliverable` 说明当前快照能否定稿。`stale` 退出 1。回执字段错误时不写入、轮次保持开放（`round_open`），证据列出缺少、未知或重复的编号。`review ID` 展示普通报告的 schema，并另给失败尝试的格式。
+`review-instructions` 在轮次目录写出 `instructions.md` 和预填的 `report.json`，返回包目录和两份文件的路径。`review --set` 的结果分三层：`receipt` 为 `accepted`、`stale` 或 `failed`，`counted` 与 `rounds` 说明是否计入轮数及剩余轮数，`deliverable` 说明当前快照能否定稿。`stale` 退出 1。回执字段错误时不写入、轮次保持开放（`round_open`），证据列出缺少、未知或重复的编号。`review ID` 展示普通报告的 schema，并另给失败尝试的格式。评审说明把原题条件当作下限：改变某个视图轮廓、色块布局或比例且仍能用准用零件修正的差异记为必需，因此不能判通过；只有零件、件数上限或连接限制无法再贴近时才可不标必需，并在修法中说明原因。[评审说明](../../packages/brickwright/src/brickwright/_review_reports.py)
 
 子进程内的普通异常把类型和消息交回父进程，记为 `execution.child_exception`；超时和异常退出分别报告。只有实际渲染时才检查 LDraw 库，缺库时记为 `render.ldraw_missing`；`compare` 只读取已渲染的图像。
 
