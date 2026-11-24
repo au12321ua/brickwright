@@ -18,7 +18,7 @@
 | P-006 | accepted | [模块接口与分块搭建](P-006-modular-building.md) |
 | P-007 | completed | [基于官方参考装配的批量验证与成类修复](archive/P-007-official-reference-assemblies.md) |
 | P-008 | completed | [精简为 skill 与 SDK](archive/P-008-skill-and-sdk.md) |
-| P-009 | draft | [流程命令的可执行报错](P-009-actionable-flow-errors.md) |
+| P-009 | draft | [流程命令的可执行恢复](P-009-actionable-flow-errors.md) |
 
 P-008 提供可自评的单题搭建演示，知识按需读取、API 按搭建动作拆页。数据集和旧接口可以随演示入口调整。[演示取舍](../decisions.md#u-12--演示从简并允许调整数据集与接口)
 
