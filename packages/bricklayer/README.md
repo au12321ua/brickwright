@@ -6,11 +6,15 @@ floating parts, disconnected pieces), and export them directly to [LDraw](https:
 
 ## Installation
 
+From the root of this fork, install the locked workspace and run scripts with its Python.
+
 ```sh
-pip install bricklayer-sdk
+uv sync --locked
 ```
 
 ## Quickstart
+
+Save this as `tower.py` and run `uv run python tower.py` to create `tower.ldr` in the current directory.
 
 ```python
 import bricklayer as bl
@@ -55,8 +59,8 @@ hinge geometry and reference poses, then compare the bundled index with its
 source data. The second command writes a report of changed and missing entries.
 
 ```sh
-python -m bricklayer.ldraw.scripts.extract_official_part_supplements --ldraw /path/to/ldraw --check
-python -m bricklayer.ldraw.scripts.extract_official_catalog --ldraw /path/to/ldraw --check --report catalog-report.json
+uv run python -m bricklayer.ldraw.scripts.extract_official_part_supplements --ldraw /path/to/ldraw --check
+uv run python -m bricklayer.ldraw.scripts.extract_official_catalog --ldraw /path/to/ldraw --check --report catalog-report.json
 ```
 
 After changing modeling data with `extract-part-data`, run the two release
@@ -66,16 +70,18 @@ two index files offline. The index includes the source tree and member checksums
 
 ## API reference
 
-For the full API reference, see `bricklayer.api_reference()` or run the following command:
+The [host skill](../../README.md#搭第一个模型) includes a generated API index under `references/api/`. Open the page for part selection, placement, geometry, connections, motion, or validation and export. The parts page also links to the color palette and factory argument tables.
+
+For programmatic access, `bricklayer.docs.api_reference_pages()` returns a mapping of filenames to Markdown. To print the full reference from the checkout, run
 
 ```sh
-python -m bricklayer
+uv run python -m bricklayer
 ```
 
 ---
 
 *Bundled part data derive from the [LDraw.org Parts Library](https://library.ldraw.org/) (CC BY 2.0/4.0),
 [BrickNet](https://github.com/kulits/BrickNet) (MIT), and [Rebrickable](https://rebrickable.com/downloads/); see
-[NOTICE](https://github.com/AvaLovelace1/brickwright/blob/main/packages/bricklayer/NOTICE).*
+[NOTICE](NOTICE).*
 
 *LEGO® is a trademark of the LEGO Group, which does not sponsor, authorize, or endorse this project.*

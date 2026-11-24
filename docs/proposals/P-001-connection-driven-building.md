@@ -17,7 +17,7 @@ Status: accepted
 
 ## 执行错误是代理接口的一部分
 
-目前验证报告已有 `error_type`、traceback、源码摘要和逐项检查，碰撞详情能列出零件，运动检查能指出部分失败姿态。探索分别捕获加载模型和执行片段的异常。内置 `finalize` 传给模型的文本可能只剩失败检查名，外部 CLI 却会输出嵌套报告。由最先掌握事实的一层生成诊断，沿两条入口传递，避免在显示端用字符串猜原因。[验证与快照](../design/validation-and-export.md) · [内置工具结果](../../packages/brickwright/src/brickwright/tools/registry.py) · [外部 CLI](../../packages/brickwright/src/brickwright/cli.py)
+目前验证报告已有 `error_type`、traceback、源码摘要和逐项检查，碰撞详情能列出零件，运动检查能指出部分失败姿态。探索分别捕获加载模型和执行片段的异常。内置 `finalize` 传给模型的文本可能只剩失败检查名，外部 CLI 却会输出嵌套报告。由最先掌握事实的一层生成诊断，沿两条入口传递，避免在显示端用字符串猜原因。[验证与快照](../design/validation-and-export.md) · 内置工具结果（`git show e88513e:packages/brickwright/src/brickwright/tools/registry.py`） · [外部 CLI](../../packages/brickwright/src/brickwright/cli.py)
 
 每条诊断约定稳定的 `code`、失败阶段 `stage`、简短说明 `message`、结构化证据 `evidence` 和有依据时的 `next_action`。下一步应能在当前入口执行。证据可含工具参数名、源码快照中的文件与行号、子模型实例路径、零件 ID、两个端点、期望值和实际值、发生干涉的采样姿态。下面是拟议输出的一条诊断，实例名与行号仅用于说明。
 

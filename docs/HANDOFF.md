@@ -1,35 +1,15 @@
 # BrickWright 交接
 
-- [BrickLayer](../packages/bricklayer/README.md) 提供零件、建模、几何校验和 LDraw 导出。
-- [BrickWright](../packages/brickwright/README.md) 提供宿主 skill 和命令行工作流。仓库根目录运行 `uv sync --locked`，然后用 `uv run brickwright skill install --target .agents/skills/brickwright` 安装。
+本分支已实现 P-008。Codex / Claude Code 加载项目内的 skill，直接编辑记录中的 Python 模型。BrickLayer 提供零件、连接、试装和 LDraw 导出，BrickWright 管理记录、结构快照、渲染、评审和定稿。安装和两块砖的起步任务见[根 README](../README.md)，开发检查见[维护约定](../AGENTS.md#阅读与验证)。
 
-开发检查见 [AGENTS.md](../AGENTS.md#阅读与验证)。单题演示使用 OMR36 蓝色动力喷气机。准备脚本将同版本的 SDK、skill 和接收端装入任务。开发后再运行真实宿主代理。[演示准备与交付](../demo/omr36/README.md)
+## 单题演示的交付状态
 
-视觉预览需要 LDraw 零件库。设置 `LDRAW_LIBRARY_PATH` 后可以运行渲染功能。
-无此库时，仍可验证结构和导出 LDraw。默认生成记录保存在仓库忽略的 `records/`。
+OMR36 蓝色动力喷气机（R-31039）已有 Harbor 准备脚本和接收端。准备脚本把本分支的两个 wheel、宿主 skill 和接收端放入原题。搭建者用原题 JSON 创建流程记录，检查结构并对照同版本渲染图，再定稿。接收端核对原题，并逐字节比较提交的 MPD、成功定稿的导出与已验证快照。真实宿主跑题留在开发完成后，本分支已记录的是离线检查结果。[演示准备](../demo/omr36/README.md) · [P-008 实施结果](proposals/archive/P-008-skill-and-sdk.md) · [U-13](decisions.md#u-13--只交付定稿快照并在开发后实测)
 
-修改模型校验或产物时，同时查看 [验证与导出设计](design/validation-and-export.md)。
+## 接手具体改动
 
-## 代理搭建流程与演示
+- 扩充搭建知识或调整 API 参考时，修改随包维护的条目、示例或 SDK 生成器，重新安装 skill 即可查看宿主读到的页面。[内容来源](architecture/overview.md#skill-的内容从哪里来)
+- 修改结构检查和交付条件时，先核对普通记录与流程记录的区别、摘要的失效条件，以及接收端实际读取的文件。[验证与导出](design/validation-and-export.md)
+- 查询旧评测时，P-001 的舱门配对、P-004 至 P-006 的六题协议和 P-007 的官方装配覆盖均有独立记录。[舱门复测](design/p001-paired-evaluation.md#铰链修复复测结果) · [六题协议](design/omr36-evaluation/README.md) · [官方装配](design/p007-official-assembly-evaluation.md)
 
-[总设计](design/agent-build-flow.md)以 OMR36 从零版第二版六题演示理解、规划、搭建、结构检查、外观评审和交付。594effd 基线每题一次，六题通过平台交付，标准目录重读最终 MPD 均零碰撞、零悬空。四题连成一体，小屋 8 个组件、巴士 5 个。六题均尝试题目机位对照，五题打印过独立评审说明，实际派发为零。[基线运行](http://localhost:8420/runs/run_01m834xe645ngv8jjcmc40svmx)
-
-此前正式配对的候选产品固定为 `e88513e`。P-004 复放了 18 条原始条件、小屋和巴士两份归档、六份参考解及 12 个结构反例。P-005 完成固定机位校准和一次真实独立读图烟测。P-006 在两个模块上验证了局部返工、快照复用和合并后的运动检查。正式六题、喷气机和巴士评测使用同一候选。 [结构复放](design/p004-structure-evaluation.md) · [Maestro 冻结口径](design/omr36-evaluation/README.md)
-
-P-007 已完成官方组合条目的全量筛查。默认预算内等价命中为轮组 67/101、铰链 11/12，四个应用轮位均通过，最终 137 个误接反例零误接。所有未覆盖条目和剩余失败保留在清单中。[装配实测](design/p007-official-assembly-evaluation.md)
-
-两项验收取舍已确认。事先声明可简化的装饰接口，在具体缺项有证据且两栏结构检查通过时可带限制交付。六题按整组检验交付、平台分和原始条件满足数不退步，喷气机用同机位盲评展示局部改善。[U-09](decisions.md#u-09--有证据的装饰接口缺项可带限制放行) · [U-10](decisions.md#u-10--六题整体不退步并展示局部改善)
-
-[P-008](proposals/archive/P-008-skill-and-sdk.md)已实现宿主 skill、分主题 API、知识查询和单题接收端。demo 可自评，只接收成功定稿且与已验证快照内容一致的 MPD。[U-12](decisions.md#u-12--演示从简并允许调整数据集与接口) · [U-13](decisions.md#u-13--只交付定稿快照并在开发后实测)
-
-## 连接装配、知识查询和零件覆盖
-
-- 从搭建意图查件可用 `bricklayer.find_connection_pairs`。已有模型可用 `find_connection_candidates` 查安装姿态，`trial_connections` 试装，`place_connection` 提交。调用方可从记录与 CLI 取得执行原因码、现场证据和修复建议。[连接驱动装配提案](proposals/P-001-connection-driven-building.md)
-- 搭建问题、零件号和诊断码可交给 `brickwright knowledge search`，再用 `brickwright knowledge show` 读取步骤、可执行示例和来源。[知识库验收结果](proposals/archive/P-002-construction-knowledge.md#实现与验收结果)
-- `bricklayer.lookup_part` 可离线查询 LDraw 2026-10 的全部 24,985 个官方顶层 ID，返回建模及碰撞能力、端点、已验证安装姿态或数据缺项。[覆盖统计与数据限制](proposals/archive/P-003-official-part-coverage.md#实现与验收结果)
-
-P-001 的 Maestro 外部代理首轮对照未通过连接占比条件。补全反向安装候选，并加入整扇门试装的可执行示例后，原五题每版各做两次，连接放置从 40/235 升至 56/239，两版均完成 10/10，质量均分均为 6/6。附加两题两版均完成 3/4。修复后的四个舱门试次全部采用候选试装，旧原生对照未运行，运行器随 P-008 移除。[评测报告](design/p001-paired-evaluation.md#铰链修复复测结果) · [复测快照](http://localhost:8420/snapshots/snp_01m81459cgpjb3nee5gkwjz5tt)
-
-此前 P-004 至 P-007 集成的 pytest 在启用冻结清单比对后通过 3,069 项，跳过 6 项。用本地 LDraw 库单独复跑其中两项渲染测试均通过，其余为三项需要原始 BrickNet 输入的提取测试和一项真实模型测试。两套发布数据生成器的 `--check`、Ruff 和 ty 均通过。从两个 wheel 在仓库外重查了官方全集，并试装了能通过五个姿态采样的铰链。
-
-铰链修复分支配置本地 LDraw 库后，pytest 通过 3,072 项，跳过 4 项（三项缺原始 BrickNet 输入，一项为按需启用的原生代理实测）。Ruff 检查、格式检查和 ty 均通过。
+各提案当前状态以[提案索引](proposals/README.md)为准。

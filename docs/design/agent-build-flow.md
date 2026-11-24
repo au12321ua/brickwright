@@ -90,7 +90,7 @@ BrickWright 有两条代理入口。`brickwright generate` 由内置循环经 Li
 上游已有的视觉评审循环保持可用。
 
 Codex 0.170.0 带有 `spawn_agent` 和 `wait_agent` 子代理工具，由多代理开关控制。
-评审代理和模块搭建依赖它开启独立上下文。现有的[外部视觉评审说明](../../packages/brickwright/src/brickwright/driver/external_critique.py)已要求外部代理自行派出子代理。
+评审代理和模块搭建依赖它开启独立上下文。现有的外部视觉评审说明（可用 `git show e88513e:packages/brickwright/src/brickwright/driver/external_critique.py` 查看）已要求外部代理自行派出子代理。
 
 ## 4 流程与放行条件
 
@@ -165,7 +165,7 @@ flowchart TD
 
 **对齐渲染。** 题目给出机位时，按 `cameras.json` 的视点、目标点、上方向和视场角渲染，与目标图逐像素对齐。
 验证器同样用 pygfx 和 ldraw2mesh 渲染，BrickWright 的渲染器基于同一套库。
-没有给出机位时，沿用现有的视角匹配代理。[视角匹配](../../packages/brickwright/src/brickwright/driver/viewpoint.py)
+没有给出机位时，沿用现有的视角匹配代理。视角匹配（`git show e88513e:packages/brickwright/src/brickwright/driver/viewpoint.py`）
 
 **指标和差异区域。** 每个视图计算轮廓交并比和颜色分，口径与验证器一致。程序生成差异叠加图，
 列出差异最大的若干区域。
@@ -175,7 +175,7 @@ flowchart TD
 不提供 `build.py` 和搭建过程。评审代理逐项对照并补报清单遗漏的要求，说明依据来自哪张图的哪个位置。记录保存独立会话与图像输入凭据，按第 5 节绑定本轮报告。
 评审代理不修改模型。
 
-现有评审只返回一段差异描述和是否完成。[视觉评审](../../packages/brickwright/src/brickwright/driver/critique.py)
+现有评审只返回一段差异描述和是否完成。视觉评审（`git show e88513e:packages/brickwright/src/brickwright/driver/critique.py`）
 本设计在其基础上加入原始条件、特征清单、逐项依据及差异图，按派发时的快照拒收串版结果。
 未写特征清单的记录继续使用原有评审。
 
@@ -196,7 +196,7 @@ flowchart TD
 合并后做整版结构检查（第 6 节），包括模块接口。之后的外观评审针对整件进行。
 
 **并行。** 外部入口由主代理为每个模块派出 Codex 子代理，各自在模块记录上工作。
-内置入口在任务指定模块时返回子记录、快照、自检结果和会话用时。[子代理派发](../../packages/brickwright/src/brickwright/tools/subagents.py)
+内置入口在任务指定模块时返回子记录、快照、自检结果和会话用时。子代理派发（`git show e88513e:packages/brickwright/src/brickwright/tools/subagents.py`）
 
 **返工。** 修改某个接口时，按约定摘要使两端模块的自检失效，只返工受影响的模块。
 父记录选用更新的子快照后重做合并、整件结构检查和评审。每个模块、合并及返工分别计时，并汇总主、子、评审代理用量。
