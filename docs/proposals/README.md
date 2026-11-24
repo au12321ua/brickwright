@@ -17,11 +17,11 @@
 | P-005 | accepted | [对齐渲染与特征评审](P-005-aligned-review.md) |
 | P-006 | accepted | [模块接口与分块搭建](P-006-modular-building.md) |
 | P-007 | completed | [基于官方参考装配的批量验证与成类修复](archive/P-007-official-reference-assemblies.md) |
-| P-008 | accepted | [精简为 skill 与 SDK](P-008-skill-and-sdk.md) |
+| P-008 | completed | [精简为 skill 与 SDK](archive/P-008-skill-and-sdk.md) |
 
-P-008 拟由宿主代理完成一次可自评的搭建演示，知识按需读取、API 按搭建动作拆页。数据集和旧接口可以随演示入口调整。[演示取舍](../decisions.md#u-12--演示从简并允许调整数据集与接口)
+P-008 提供可自评的单题搭建演示，知识按需读取、API 按搭建动作拆页。数据集和旧接口可以随演示入口调整。[演示取舍](../decisions.md#u-12--演示从简并允许调整数据集与接口)
 
-P-001 已通过离线验收。首轮 Maestro 外部代理对照的质量与完成度持平，连接放置占比下降。铰链修复后的外部复测通过原五题三项条件，原生代理的行为验收仍待运行。[复测结果](../design/p001-paired-evaluation.md#铰链修复复测结果) · [复测快照](http://localhost:8420/snapshots/snp_01m81459cgpjb3nee5gkwjz5tt)
+P-001 已通过离线验收。首轮 Maestro 外部代理对照的质量与完成度持平，连接放置占比下降。铰链修复后的外部复测通过原五题三项条件，旧原生代理行为对照未运行，运行器随 P-008 移除。[复测结果](../design/p001-paired-evaluation.md#铰链修复复测结果) · [复测快照](http://localhost:8420/snapshots/snp_01m81459cgpjb3nee5gkwjz5tt)
 
 P-004 至 P-006 由[代理搭建流程总设计](../design/agent-build-flow.md)派生，三者的分工和对接问题见总设计的[派生提案](../design/agent-build-flow.md#9-派生提案)一节。
 

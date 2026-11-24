@@ -90,7 +90,7 @@ OMR36 正式配对对照按六题汇总，新版交付通过率、平台分均�
 - Superseded by: none
 
 演示默认由 Codex、Claude Code 等宿主代理使用。在本 fork 内精简 BrickWright：记录、流程放行、模块和评审绑定保留为 workflow 库及其命令行；
-流程说明、搭建知识和 API 文档改由 skill 提供；移除内置代理和 LiteLLM。LijuBrick 等自行调用模型的后端，待实际合作时再定接入方式。[P-008](proposals/P-008-skill-and-sdk.md)
+流程说明、搭建知识和 API 文档改由 skill 提供；移除内置代理和 LiteLLM。LijuBrick 等自行调用模型的后端，待实际合作时再定接入方式。[P-008](proposals/archive/P-008-skill-and-sdk.md)
 
 ## U-12 — 演示从简并允许调整数据集与接口
 
@@ -98,7 +98,7 @@ OMR36 正式配对对照按六题汇总，新版交付通过率、平台分均�
 - Supersedes: none
 - Superseded by: none
 
-P-008 以快速跑通宿主代理搭建 demo 为目标。skill 应能按需展开搭建知识并支持分批扩充，API 参考进一步拆分。演示可用主代理自评，可调整数据集以适配新入口。旧接口兼容与演示目标冲突时以演示为先。P-008 采用轻量验收，U-10 的六题比较用于原正式配对评测。[P-008](proposals/P-008-skill-and-sdk.md) · [U-10](#u-10--六题整体不退步并展示局部改善)
+P-008 以快速跑通宿主代理搭建 demo 为目标。skill 应能按需展开搭建知识并支持分批扩充，API 参考进一步拆分。演示可用主代理自评，可调整数据集以适配新入口。旧接口兼容与演示目标冲突时以演示为先。P-008 采用轻量验收，U-10 的六题比较用于原正式配对评测。[P-008](proposals/archive/P-008-skill-and-sdk.md) · [U-10](#u-10--六题整体不退步并展示局部改善)
 
 ## U-13 — 只交付定稿快照并在开发后实测
 
@@ -106,4 +106,4 @@ P-008 以快速跑通宿主代理搭建 demo 为目标。skill 应能按需展�
 - Supersedes: none
 - Superseded by: none
 
-demo 接收时核对成功定稿的版本及其已验证快照中的 MPD 内容。真实代理验证安排在开发完成之后。[P-008](proposals/P-008-skill-and-sdk.md)
+demo 接收时核对成功定稿的版本及其已验证快照中的 MPD 内容。真实代理验证安排在开发完成之后。[P-008](proposals/archive/P-008-skill-and-sdk.md)

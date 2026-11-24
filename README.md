@@ -37,10 +37,14 @@ This repository contains two packages:
 
 ## Quickstart
 
-1. Download this repo: `git clone https://github.com/AvaLovelace1/brickwright.git`.
-2. Ask your favorite agent (Codex, Claude Code, etc.) to create a brick build following
-   the [packages/brickwright README](packages/brickwright/README.md).
-3. Have fun!
+From this fork's checkout, install the SDK and the host skill:
+
+```sh
+uv sync --locked
+uv run brickwright skill install --target .agents/skills/brickwright
+```
+
+Open the project in your host agent and ask it to build a model using the BrickWright skill. For a task with images and a verified MPD submission, see the single-task demo. [BrickWright usage](packages/brickwright/README.md) · [OMR36 demo](demo/omr36/README.md)
 
 ## Development
 

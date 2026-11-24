@@ -1,73 +1,35 @@
 # BrickWright
 
-**BrickWright** is an agentic framework for creating LEGO® builds with
-[BrickLayer](https://github.com/AvaLovelace1/brickwright/tree/main/packages/bricklayer). Using BrickWright,
-you can direct your favorite AI agents (GPT, Claude, Gemini, etc.) to automatically create brick builds from text or
-image prompts and export them to [LDraw](https://www.ldraw.org/).
+Build LEGO® models with a host coding agent and the BrickLayer Python SDK. BrickWright stores the editable model, validation results, camera views, reviews and finalized LDraw export.
 
-## Usage
+## Install the fork and skill
 
-### 1. Install prerequisites
-
-Install the BrickWright CLI. We recommend using [uv](https://docs.astral.sh/uv/):
+From the repository root, run:
 
 ```sh
-uv tool install brickwright
+uv sync --locked
+uv run brickwright skill install --target .agents/skills/brickwright
 ```
 
-#### LDraw parts library (optional but recommended)
+For Claude Code, use `.claude/skills/brickwright` as the target. Open the project in your host agent and ask it to build from your text or reference images using the BrickWright skill. The installed `SKILL.md` includes the SDK interpreter and a working two-brick example. Set `LDRAW_LIBRARY_PATH` to your LDraw parts library to render the model.
 
-BrickWright can render a build to a preview image, letting the agent visually check a build. To enable rendering,
-you must download the [LDraw parts library](https://library.ldraw.org/updates?latest) and set the environment
-variable `$LDRAW_LIBRARY_PATH` to its path. Without a library, the rendering tool is disabled.
-
-### 2. Start creating!
-
-#### Option 1: External Agent (e.g. Codex, Claude Code)
-
-Simply prompt your favorite agent to create a brick build following the instructions
-in [EXTERNAL_AGENT_INSTRUCTIONS.md](https://github.com/AvaLovelace1/brickwright/blob/main/packages/brickwright/EXTERNAL_AGENT_INSTRUCTIONS.md).
-
-#### Option 2: API key (e.g. OpenAI Platform, Claude Console)
-
-Ensure that the key for your favorite AI provider is set as an environment
-variable (e.g., `$ANTHROPIC_API_KEY`, `$OPENAI_API_KEY`).
-
-```
-export OPENAI_API_KEY="sk-XXX"
-# OR
-export ANTHROPIC_API_KEY="XXX"
-```
-
-Then, run `brickwright generate`:
-
-```zsh
-brickwright generate "a detailed cruise ship" [--image ref.png] [--model M] [--effort E]
-```
-
-Specify the generation model (e.g. `claude-opus-4-8`, `gpt-5`) with `--model` or by setting the environment variable
-`$BRICKWRIGHT_GENERATION_MODEL`.
-You can run `litellm.get_valid_models()` for a list of available models based on your environment's set API keys.
-
-Results are saved to `--records-dir` (default `./records`, or `$BRICKWRIGHT_RECORDS_DIR`
-if set).
-
-Run `brickwright generate --help` for more options.
-
-### Building knowledge
-
-Search the bundled guides by build task, part ID, or diagnostic code. Open a matching
-ID to get the steps, runnable example, expected checks, and sources. Searches with a
-part ID in the guides also report that part’s capabilities from the installed catalog.
+## Find a technique
 
 ```sh
-brickwright knowledge search 'a hatch that hits the surrounding bodywork'
-brickwright knowledge show aircraft-wing-and-hatch
+uv run brickwright knowledge search 'a hatch that hits the surrounding bodywork'
+uv run brickwright knowledge show hinged-panels
 ```
 
-The same search and read operations are available in Python as `search_knowledge` and
-`read_knowledge` from `brickwright.knowledge`.
+Matches include a path relative to the installed skill. Open a technique, example, or API topic when the build needs it.
 
----
+## Accept a demo submission
+
+Use a flow record with the original task, validate and review the current model, then run `brickwright external finalize ID`. Copy the exported `out/build.ldr` to the submission path. The receiver checks the submitted file against the verified snapshot and the current successful finalization:
+
+```sh
+uv run brickwright external verify-delivery ID model.mpd
+```
+
+The command exits successfully on a match and returns the snapshot ID, MPD digest and review method. Records default to `./records`. Use `BRICKWRIGHT_RECORDS_DIR` or `--records-dir` for another location. The single-task example includes the verifier used by Harbor. [OMR36 demo](../../demo/omr36/README.md)
 
 *LEGO® is a trademark of the LEGO Group, which does not sponsor, authorize, or endorse this project.*
