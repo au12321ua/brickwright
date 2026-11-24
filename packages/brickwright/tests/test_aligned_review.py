@@ -388,6 +388,7 @@ def test_external_review_can_fall_back_to_matched_viewpoint(
 ):
     record, state, _ = reviewed_record
     (record.out_dir / "comparison.json").unlink()
+    (record.out_dir / "aligned-render.json").unlink()
     portrait = record.path / "prompt.jpg"
     Image.new("RGB", (100, 200), (80, 220, 140)).save(portrait)
     record.meta_path.write_text(
@@ -537,3 +538,34 @@ def test_internal_condition_uses_frozen_validation_check(
     assert bool(receipt["remaining_items"]) is not passed
     if passed:
         assert receipt["structural_evidence"]["C01"] == [check_id]
+
+
+def test_compare_names_each_missing_reference_image(reviewed_record, tmp_path):
+    record, _, reference = reviewed_record
+    (reference / "goal-reverse.png").rename(reference / "reverse.png")
+    with pytest.raises(ValueError) as error:
+        review.compare_record(record, reference)
+    message = str(error.value)
+    assert "goal-reverse.png" in message
+    assert "goal-top.png" not in message
+    assert "goal-<camera>.png" in message
+    assert "top, reverse" in message
+
+
+def test_uncompared_fixed_render_points_to_compare_not_viewpoint_matching(
+    reviewed_record,
+):
+    record, _, _ = reviewed_record
+    (record.out_dir / "comparison.json").unlink()
+    portrait = record.path / "prompt.png"
+    Image.new("RGB", (100, 100), (80, 220, 140)).save(portrait)
+    record.meta_path.write_text(
+        json.dumps({"prompt": "Build a blue object", "prompt_image": portrait.name})
+    )
+    with pytest.raises(ValueError) as error:
+        review.review_instructions(record, parent_session_id="builder")
+    message = str(error.value)
+    assert f"brickwright external compare {record.id} --reference-dir" in message
+    assert "goal-top.png" in message
+    assert "render-angle" not in message
+    assert not (record.path / "reviews").exists()

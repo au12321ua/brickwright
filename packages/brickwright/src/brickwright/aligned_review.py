@@ -184,6 +184,17 @@ def compare_record(record: Record, reference_dir: Path) -> dict:
     if render.alignment != "fixed_cameras":
         raise ValueError("pixel comparison requires fixed-camera renders")
     render.cameras.read(record)
+    missing = [
+        f"goal-{name}.png"
+        for name in render.views
+        if not (reference_dir / f"goal-{name}.png").is_file()
+    ]
+    if missing:
+        raise ValueError(
+            f"Missing reference images in {reference_dir}: {', '.join(missing)}. "
+            "Name each target image goal-<camera>.png for the cameras "
+            f"{', '.join(render.views)}."
+        )
     references, overlays, metrics = {}, {}, {}
     with TemporaryDirectory() as scratch:
         for name, candidate in render.views.items():
@@ -493,6 +504,8 @@ def review_instructions(
     if matched_angle is not None:
         _prepare_matched_view(record, matched_angle, config)
     if not _comparison_path(record).is_file():
+        if message := _compare_first(record):
+            raise ValueError(message)
         return _match_viewpoint_instructions(record)
     round_path = _prepare_round(record, parent_session_id)
     manifest = round_path / "inputs/manifest.json"
@@ -514,6 +527,25 @@ def review_instructions(
         "Copy all image_reads names from the manifest only after opening those files. "
         "Return this JSON schema with the round ID and digest above.\n"
         f"{json.dumps(Report.model_json_schema(), indent=2)}"
+    )
+
+
+def _compare_first(record: Record) -> str | None:
+    """Explain the missing comparison after a fixed-camera render."""
+    try:
+        data = _render_path(record).read_bytes()
+    except FileNotFoundError:
+        return None
+    render = _Render.model_validate_json(data)
+    if render.alignment != "fixed_cameras":
+        return None
+    names = ", ".join(f"goal-{name}.png" for name in render.views)
+    records_dir = quote(str(record.path.parent.resolve()))
+    return (
+        "Fixed-camera views are rendered but not compared with the targets. Run "
+        f"`brickwright external compare {quote(record.id)} --reference-dir DIR "
+        f"--records-dir {records_dir}`, where DIR contains {names}, then request "
+        "the review instructions again."
     )
 
 
