@@ -17,7 +17,7 @@ Status: accepted
 
 ## 执行错误是代理接口的一部分
 
-目前验证报告已有 `error_type`、traceback、源码摘要和逐项检查，碰撞详情能列出零件，运动检查能指出部分失败姿态。探索分别捕获加载模型和执行片段的异常。内置 `finalize` 传给模型的文本可能只剩失败检查名，外部 CLI 却会输出嵌套报告。由最先掌握事实的一层生成诊断，沿两条入口传递，避免在显示端用字符串猜原因。[验证与快照](../design/validation-and-export.md) · [内置工具结果](../../packages/brickwright/src/brickwright/tools/registry.py) · [外部 CLI](../../packages/brickwright/src/brickwright/cli.py)
+目前验证报告已有 `error_type`、traceback、源码摘要和逐项检查，碰撞详情能列出零件，运动检查能指出部分失败姿态。探索分别捕获加载模型和执行片段的异常。内置 `finalize` 传给模型的文本可能只剩失败检查名，外部 CLI 却会输出嵌套报告。由最先掌握事实的一层生成诊断，沿两条入口传递，避免在显示端用字符串猜原因。[验证与快照](../design/validation-and-export.md) · 内置工具结果（`git show e88513e:packages/brickwright/src/brickwright/tools/registry.py`） · [外部 CLI](../../packages/brickwright/src/brickwright/cli.py)
 
 每条诊断约定稳定的 `code`、失败阶段 `stage`、简短说明 `message`、结构化证据 `evidence` 和有依据时的 `next_action`。下一步应能在当前入口执行。证据可含工具参数名、源码快照中的文件与行号、子模型实例路径、零件 ID、两个端点、期望值和实际值、发生干涉的采样姿态。下面是拟议输出的一条诊断，实例名与行号仅用于说明。
 
@@ -68,7 +68,7 @@ SDK 与代理指引已接入配对查询、模型内候选、试装和提交。�
 
 针对该轮舱门的复现，默认候选会在原安装方向之外尝试反向的转动关节。明确给定的安装姿态和目标旋转沿用原有拟合方式。每对转动端点最多增加四个反向安装角度，既有试装上限仍为八个。完整门板放在子模型内进行试装，碰撞和运动检查会包含门板与箱体。修复版按默认上限回放归档的 41 件舱门，八个候选中第七个通过，指定向上开启时四个中的第三个通过。闭合至 90° 每隔 15° 的成品几何与原件逐件相同，31 个运动采样通过。[实现](../../packages/bricklayer/src/bricklayer/modeling/assembly.py) · [可执行示例](../../packages/brickwright/src/brickwright/knowledge/examples/hinged_panels.py)
 
-铰链修复的外部复测以同样已包含 P-001 的 `52a813a` 为基线。原五题连接放置从 17.0% 升至 23.4%，成品质量均分维持 6/6、完成数均为 10/10，通过这次配对的三项条件。两种舱门共四次，采用候选试装从 0/4 增至 4/4。附加两题两版各完成 3/4。原生代理尚待改动前后的正式对照。[复测结果](../design/p001-paired-evaluation.md#铰链修复复测结果) · [复测快照](http://localhost:8420/snapshots/snp_01m81459cgpjb3nee5gkwjz5tt)
+铰链修复的外部复测以同样已包含 P-001 的 `52a813a` 为基线。原五题连接放置从 17.0% 升至 23.4%，成品质量均分维持 6/6、完成数均为 10/10，通过这次配对的三项条件。两种舱门共四次，采用候选试装从 0/4 增至 4/4。附加两题两版各完成 3/4。该原生代理对照未运行，运行器随宿主版 P-008 移除。[复测结果](../design/p001-paired-evaluation.md#铰链修复复测结果) · [复测快照](http://localhost:8420/snapshots/snp_01m81459cgpjb3nee5gkwjz5tt)
 
 ## OMR36 现场复核与后续分工
 

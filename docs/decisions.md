@@ -82,3 +82,28 @@ U-06 的演示中，主代理、子代理和评审代理均使用 `gpt-6.2-sol`�
 - Superseded by: none
 
 OMR36 正式配对对照按六题汇总，新版交付通过率、平台分均值和题面原始完成条件的满足数分别达到或超过基线。逐题公布结果，允许持平和个别波动。P-005 用喷气机返修前后的同机位图及盲评，展示至少一处可观察的改善。[总设计](design/agent-build-flow.md#2-评测与验收)
+
+## U-11 — 在 fork 内精简为 skill 与 SDK
+
+- Source: 2026-11-23，讨论改为 skill + SDK 时，用户说明「对于demo，我觉得只面向前者是合理的假设，如果真的合作，再谈怎么改也没问题。折中方案我也觉得挺好，workflow库就是一个挺不错的形式」，继而提出「把知识库和api文档拆出去，然后取消litellm这一套，默认使用者是codex、claude code这种agent」，并确认「先在fork里精简吧」。
+- Supersedes: none
+- Superseded by: none
+
+演示默认由 Codex、Claude Code 等宿主代理使用。在本 fork 内精简 BrickWright：记录、流程放行、模块和评审绑定保留为 workflow 库及其命令行；
+流程说明、搭建知识和 API 文档改由 skill 提供；移除内置代理和 LiteLLM。LijuBrick 等自行调用模型的后端，待实际合作时再定接入方式。[P-008](proposals/archive/P-008-skill-and-sdk.md)
+
+## U-12 — 演示从简并允许调整数据集与接口
+
+- Source: 2026-11-23，用户审阅 P-008 时说明「一切从简从快，不需要跑那么多验证，如果数据集有问题，那就修改数据集来适配」「我同意skill架构要进一步修改，api还需要进一步拆分」，对 demo 的评审表示「可以放宽」，并明确「兼容有问题，就不要兼容了，一切以目标为先」。
+- Supersedes: none
+- Superseded by: none
+
+P-008 以快速跑通宿主代理搭建 demo 为目标。skill 应能按需展开搭建知识并支持分批扩充，API 参考进一步拆分。演示可用主代理自评，可调整数据集以适配新入口。旧接口兼容与演示目标冲突时以演示为先。P-008 采用轻量验收，U-10 的六题比较用于原正式配对评测。[P-008](proposals/archive/P-008-skill-and-sdk.md) · [U-10](#u-10--六题整体不退步并展示局部改善)
+
+## U-13 — 只交付定稿快照并在开发后实测
+
+- Source: 2026-11-23，用户明确「demo 只接收 finalize 成功的那一版模型，并核对提交的 MPD 与已验证快照内容一致」，并指定「实际agent验证不在开发中完成」。
+- Supersedes: none
+- Superseded by: none
+
+demo 接收时核对成功定稿的版本及其已验证快照中的 MPD 内容。真实代理验证安排在开发完成之后。[P-008](proposals/archive/P-008-skill-and-sdk.md)

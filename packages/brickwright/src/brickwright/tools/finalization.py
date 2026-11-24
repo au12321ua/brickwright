@@ -4,8 +4,11 @@ from __future__ import annotations
 
 import json
 import traceback
+from hashlib import sha256
 from pathlib import Path
 from typing import Any
+
+from pydantic import BaseModel
 
 from ..config import Config
 from ..flow import flow_status
@@ -41,6 +44,57 @@ class FinalizationReport(DiagnosticReport):
         )
         data["flow"] = summarize_flow(self.flow)
         return json.dumps(data, indent=indent, ensure_ascii=False)
+
+
+class DeliveryVerification(BaseModel):
+    """Whether a submitted MPD matches the current finalized flow snapshot."""
+
+    ok: bool
+    error: str | None = None
+    snapshot_id: str | None = None
+    mpd_sha256: str | None = None
+    review_outcome: str | None = None
+    review_dispatch: str | None = None
+
+
+def verify_delivery(record: Record, file: Path) -> DeliveryVerification:
+    """Check the current finalize marker and compare the submitted MPD byte for byte."""
+    try:
+        meta = record.read_meta()
+        if (
+            meta.flow is None
+            or not meta.finalized
+            or meta.stop_reason is not StopReason.FINALIZED
+        ):
+            raise ValueError("The record has no current successful flow finalization.")
+        if not file.is_file():
+            raise ValueError(f"The submitted MPD is missing or not a file: {file}")
+        submitted = file.read_bytes()
+        state = flow_status(record)
+        if not state["ready"] or not state["finalized"]:
+            raise ValueError("The finalized flow evidence is no longer current.")
+        frozen = Path(state["mpd_path"]).read_bytes()
+        digest = sha256(frozen).hexdigest()
+        if digest != state["mpd_sha256"] or record.ldr_path.read_bytes() != frozen:
+            raise ValueError("The finalized output differs from the verified snapshot.")
+        if submitted != frozen:
+            raise ValueError("The submitted MPD differs from the finalized snapshot.")
+        current = record.read_meta()
+        if (
+            not current.finalized
+            or current.stop_reason is not StopReason.FINALIZED
+            or current.finalized_flow_sha256 != meta.finalized_flow_sha256
+        ):
+            raise ValueError("The finalization changed during delivery verification.")
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        return DeliveryVerification(ok=False, error=str(exc))
+    return DeliveryVerification(
+        ok=True,
+        snapshot_id=state["snapshot_id"],
+        mpd_sha256=digest,
+        review_outcome=state["review_outcome"],
+        review_dispatch=state["review"].get("dispatch"),
+    )
 
 
 def finalize(record: Record, config: Config | None = None) -> FinalizationReport:
@@ -108,10 +162,18 @@ def _finalize_flow(record: Record, source: str, config: Config) -> FinalizationR
                 Diagnostic.model_validate(issue) for issue in state["diagnostics"]
             ],
         )
-    path = Path(state["mpd_path"])
+    structure = validation.structure
+    digest = state["mpd_sha256"]
+    if structure is None or not structure.passed or structure.mpd_sha256 != digest:
+        return _flow_changed(record, validation, state)
+    prompt_image = record.read_meta().prompt_image
+    try:
+        stamp = delivery_stamp(record, prompt_image, output_sha256=digest)
+    except OSError:
+        return _flow_changed(record, validation, state)
     report = build_execution.run_guarded(
         _publish_flow,
-        (record, path),
+        (record, Path(state["mpd_path"]), digest),
         config.render_timeout,
         lambda exc: FinalizationReport(
             ok=False,
@@ -127,50 +189,66 @@ def _finalize_flow(record: Record, source: str, config: Config) -> FinalizationR
     if report.ok and (
         not current["ready"]
         or current["snapshot_id"] != state["snapshot_id"]
-        or not _same_output(record, path)
+        or current["artifacts"] != state["artifacts"]
+        or current["review"] != state["review"]
+        or not _same_delivery(record, prompt_image, stamp)
     ):
-        report = FinalizationReport(
-            ok=False,
-            error="Flow inputs changed during finalization.",
-            diagnostics=[
-                Diagnostic(
-                    code="flow.changed",
-                    stage="finalize",
-                    message="Flow inputs changed during finalization.",
-                    next_action=f"brickwright external status {record.id}",
-                )
-            ],
-        )
+        report = _flow_changed(record, validation, current)
     if report.ok:
-        meta = record.read_meta()
         record.update_meta(
             finalized=True,
             exported_source_sha256=validation.source_sha256,
-            finalized_flow_sha256=delivery_stamp(record, meta.prompt_image),
+            finalized_flow_sha256=stamp,
             stop_reason=StopReason.FINALIZED,
         )
-    else:
+        current = flow_status(record)
+        if (
+            not current["ready"]
+            or not current["finalized"]
+            or current["snapshot_id"] != state["snapshot_id"]
+            or not _same_delivery(record, prompt_image, stamp)
+        ):
+            report = _flow_changed(record, validation, current)
+    if not report.ok:
         record.clear_exports()
-    return report.model_copy(
-        update={
-            "validation": validation,
-            "flow": flow_status(record) if report.ok else current,
-        }
+    return report.model_copy(update={"validation": validation, "flow": current})
+
+
+def _flow_changed(
+    record: Record, validation: ValidationReport, state: dict[str, Any]
+) -> FinalizationReport:
+    message = "Flow inputs changed during finalization."
+    return FinalizationReport(
+        ok=False,
+        error=message,
+        validation=validation,
+        flow=state,
+        diagnostics=[
+            Diagnostic(
+                code="flow.changed",
+                stage="finalize",
+                message=message,
+                next_action=f"brickwright external status {record.id}",
+            )
+        ],
     )
 
 
-def _same_output(record: Record, mpd: Path) -> bool:
+def _same_delivery(record: Record, prompt_image: str | None, stamp: str) -> bool:
     try:
-        return record.ldr_path.read_bytes() == mpd.read_bytes()
+        return delivery_stamp(record, prompt_image) == stamp
     except OSError:
         return False
 
 
-def _publish_flow(record: Record, mpd: Path) -> FinalizationReport:
+def _publish_flow(record: Record, mpd: Path, digest: str) -> FinalizationReport:
     """Publish bytes from the structural snapshot, without re-executing source."""
     stage = "export"
     try:
-        atomic_write(record.ldr_path, mpd.read_bytes())
+        frozen = mpd.read_bytes()
+        if sha256(frozen).hexdigest() != digest:
+            raise ValueError("The verified MPD changed before publication.")
+        atomic_write(record.ldr_path, frozen)
         if rendering.render_available():
             stage = "render"
             rendering._convert(record.ldr_path, record.mesh_path)

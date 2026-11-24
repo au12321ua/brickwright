@@ -4,7 +4,7 @@ Status: completed
 
 ## 问题与目标
 
-现有内外代理共享搭建指引和从代码生成的完整 API 参考。知道函数名的代理能查到参数，但“翼子板挡住转向轮”涉及空间、选件、运动检查三个问题，靠单个函数说明难以回答。Nova 的指南、可检索案例和专题研究提供了选题依据。我们要让使用 BrickWright 的代理用自己的任务描述、零件号或执行错误找到下一步，并让案例随 SDK 演进保持可用。[提示组装](../../../packages/brickwright/src/brickwright/prompts/compilation.py) · [Nova 搭建指南](https://github.com/anteloc/ldraw-nova/tree/d1e93d73f6ffe6955caa90953a98a0c90fbd5c5c/docs/agent/guides)
+现有内外代理共享搭建指引和从代码生成的完整 API 参考。知道函数名的代理能查到参数，但“翼子板挡住转向轮”涉及空间、选件、运动检查三个问题，靠单个函数说明难以回答。Nova 的指南、可检索案例和专题研究提供了选题依据。我们要让使用 BrickWright 的代理用自己的任务描述、零件号或执行错误找到下一步，并让案例随 SDK 演进保持可用。提示组装（`git show e88513e:packages/brickwright/src/brickwright/prompts/compilation.py`） · [Nova 搭建指南](https://github.com/anteloc/ldraw-nova/tree/d1e93d73f6ffe6955caa90953a98a0c90fbd5c5c/docs/agent/guides)
 
 ## 内容与交付
 

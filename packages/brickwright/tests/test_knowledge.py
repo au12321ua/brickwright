@@ -1,12 +1,11 @@
 import json
+from pathlib import Path
 
 import pytest
 from typer.testing import CliRunner
 
 from brickwright import knowledge
 from brickwright.cli import app
-from brickwright.prompts import system_prompt
-from brickwright.tools import execute_tool
 
 
 @pytest.fixture
@@ -112,51 +111,68 @@ def test_read_requires_an_entry_id_and_has_no_path_lookup():
 
 
 @pytest.mark.usefixtures("knowledge_resources")
-def test_cli_and_tools_use_the_same_search_and_read_results(config, record):
+def test_cli_and_python_use_the_same_search_and_read_results():
     runner = CliRunner()
     query = "aircraft hatch"
-    for command, name, argument, value, expected in [
-        (
-            "search",
-            "search_building_knowledge",
-            "query",
-            query,
-            knowledge.search_knowledge(query),
-        ),
-        (
-            "show",
-            "read_building_knowledge",
-            "entry_id",
-            "swinging-flap",
-            knowledge.read_knowledge("swinging-flap"),
-        ),
+    for command, value, expected in [
+        ("search", query, knowledge.search_knowledge(query)),
+        ("show", "swinging-flap", knowledge.read_knowledge("swinging-flap")),
     ]:
         cli = runner.invoke(app, ["knowledge", command, value])
-        tool = execute_tool(record, config, name, {argument: value})
         assert cli.exit_code == 0, cli.output
-        assert tool.ok
-        assert (
-            json.loads(cli.stdout)
-            == json.loads(tool.content)
-            == expected.model_dump(mode="json")
-        )
+        assert json.loads(cli.stdout) == expected.model_dump(mode="json")
 
 
 @pytest.mark.usefixtures("knowledge_resources")
-def test_unknown_entry_is_a_read_error(config, record):
+def test_unknown_entry_is_a_read_error():
     cli = CliRunner().invoke(app, ["knowledge", "show", "unknown-entry"])
-    tool = execute_tool(
-        record, config, "read_building_knowledge", {"entry_id": "unknown-entry"}
-    )
     assert cli.exit_code == 1
-    assert not tool.ok
-    assert "unknown-entry" in cli.output and "unknown-entry" in tool.content
+    assert "unknown-entry" in cli.output
 
 
-def test_agent_instructions_offer_their_knowledge_entry_points():
-    external = system_prompt(external=True)
-    internal = system_prompt()
-    assert "brickwright knowledge search" in external
-    assert "brickwright knowledge show" in external
-    assert "search_building_knowledge" in internal
-    assert "read_building_knowledge" in internal
+def test_added_batch_is_searchable_and_installs_its_pages_and_examples(
+    knowledge_resources, tmp_path
+):
+    from shutil import copyfile
+
+    copyfile(
+        Path(knowledge.__file__).with_name("CONTENT-LICENSE.md"),
+        tmp_path / "CONTENT-LICENSE.md",
+    )
+    copyfile(Path(knowledge.__file__).with_name("LICENSE"), tmp_path / "LICENSE")
+    root = tmp_path / "installed"
+    runner = CliRunner()
+    command = ["skill", "install", "--target", str(root)]
+    result = runner.invoke(app, command)
+    assert result.exit_code == 0, result.output
+    original = (root / "SKILL.md").read_bytes()
+    for filename, entry_id in [
+        ("swinging-flap.json", "bogie-joint"),
+        ("clamping-flap.json", "bogie-lock"),
+    ]:
+        entry = json.loads(
+            (tmp_path / "entries" / filename).read_text(encoding="utf-8")
+        )
+        entry.update(id=entry_id, aliases=["bogie coupler"])
+        if entry["example"]:
+            example = tmp_path / "examples" / "bogie_joint.py"
+            copyfile(knowledge_resources, example)
+            entry["example"] = example.name
+        (tmp_path / "entries" / f"{entry_id}.json").write_text(
+            json.dumps(entry), encoding="utf-8"
+        )
+    knowledge._entries.cache_clear()
+    result = runner.invoke(app, command)
+    assert result.exit_code == 0, result.output
+    assert (root / "SKILL.md").read_bytes() == original
+    matches = knowledge.search_knowledge("bogie coupler").matches
+    assert [match.id for match in matches] == ["bogie-joint", "bogie-lock"]
+    for match in matches:
+        page = root / match.path
+        assert page.read_text(encoding="utf-8").startswith(f"# {match.title}")
+    article = (root / matches[0].path).read_text(encoding="utf-8")
+    example = root / "references/knowledge/examples/bogie_joint.py"
+    assert "](examples/bogie_joint.py)" in article
+    assert example.read_text(encoding="utf-8") == knowledge_resources.read_text(
+        encoding="utf-8"
+    )

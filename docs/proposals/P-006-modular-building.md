@@ -5,7 +5,7 @@ Status: accepted
 ## 问题与目标
 
 现有的 `dispatch_subagents` 让子代理在各自的临时记录中工作，只把文本交回主代理，由主代理自己整合代码。
-[子代理派发](../../packages/brickwright/src/brickwright/tools/subagents.py)
+子代理派发（`git show e88513e:packages/brickwright/src/brickwright/tools/subagents.py`）
 子代理不知道自己负责的范围和接口，主代理也无法检查交回的部件能否接上。外部入口没有对应的分块方式。
 
 本提案实现[总设计第 8 节](../design/agent-build-flow.md#8-模块化搭建)：模块约定写在 P-004 的规划中，

@@ -260,6 +260,7 @@ def test_frozen_packet_and_idempotent_review(reviewed_record, tmp_path):
         "rounds": 1,
         "remaining_items": [],
         "current": True,
+        "dispatch": "codex_subagent",
     }
     report["features"][0]["evidence"][0]["observation"] = "Second conflicting answer"
     with pytest.raises(ValueError, match="different report"):
@@ -288,6 +289,7 @@ def test_stale_reports_do_not_grant_credit(reviewed_record, tmp_path, change):
         "rounds": 0,
         "remaining_items": [],
         "current": False,
+        "dispatch": None,
     }
     assert (packet / "goal-top.png").read_bytes() == frozen
 
@@ -304,6 +306,7 @@ def test_accepted_round_loses_currency_when_reference_changes(
         "rounds": 1,
         "remaining_items": [],
         "current": False,
+        "dispatch": None,
     }
 
 
@@ -353,47 +356,6 @@ def test_requires_original_conditions_and_records_required_discovery(
     ]
 
 
-def test_native_review_sees_images_in_fresh_request_and_accounts_usage(reviewed_record):
-    from types import SimpleNamespace
-
-    from brickwright.config import Config, Effort
-
-    record, _, _ = reviewed_record
-    _, example = _open_round(record)
-    judgment = {
-        key: example[key] for key in ("conditions", "features", "findings", "verdict")
-    }
-    response = SimpleNamespace(
-        id="critique-response",
-        choices=[
-            SimpleNamespace(message=SimpleNamespace(content=json.dumps(judgment)))
-        ],
-    )
-
-    def complete(*, messages, model, reasoning_effort):
-        assert model == "separate-vision"
-        assert reasoning_effort == "medium"
-        assert [message["role"] for message in messages] == ["system", "user"]
-        assert sum(item["type"] == "image_url" for item in messages[1]["content"]) == 6
-        assert all(
-            "create_build" not in item.get("text", "")
-            for item in messages[1]["content"]
-        )
-        return response
-
-    observed = []
-    config = Config(
-        model="builder", critique_model="separate-vision", critique_effort=Effort.MEDIUM
-    )
-    saved = review.run_independent_review(
-        record, config, observed.append, complete=complete
-    )
-    assert observed == [response]
-    assert saved["status"] == "accepted"
-    assert saved["report"]["reviewer"]["dispatch"] == "independent_model"
-    assert review.review_status(record, "first")["passed"]
-
-
 def test_new_comparison_invalidates_outstanding_review_even_if_original_images_persist(
     reviewed_record, tmp_path
 ):
@@ -426,6 +388,7 @@ def test_external_review_can_fall_back_to_matched_viewpoint(
 ):
     record, state, _ = reviewed_record
     (record.out_dir / "comparison.json").unlink()
+    (record.out_dir / "aligned-render.json").unlink()
     portrait = record.path / "prompt.jpg"
     Image.new("RGB", (100, 200), (80, 220, 140)).save(portrait)
     record.meta_path.write_text(
@@ -434,6 +397,10 @@ def test_external_review_can_fall_back_to_matched_viewpoint(
     instructions = review.review_instructions(record)
     assert "external render-angle" in instructions
     assert "--azimuth <A> --elevation <E>" in instructions
+    assert (
+        f"external review-instructions {record.id} --azimuth <A> --elevation <E> "
+        f"--records-dir {record.path.parent}"
+    ) in instructions
 
     def render_approximate(fn, args, timeout):
         model, angles, output = args
@@ -512,3 +479,93 @@ def test_historical_review_count_requires_intact_frozen_packet(
     assert review.review_status(record, "")["rounds"] == 1
     (packet / "goal-top.png").unlink()
     assert review.review_status(record, "")["rounds"] == 0
+
+
+def test_host_self_review_can_use_the_build_session_for_multiple_rounds(
+    reviewed_record, tmp_path
+):
+    record, _, _ = reviewed_record
+    for number in (1, 2):
+        _, report = _open_round(record)
+        reviewer = report["reviewer"]
+        reviewer.update(dispatch="self", session_id=reviewer["parent_session_id"])
+        assert _submit(record, report, tmp_path)["passed"]
+        status = review.review_status(record, "first")
+        assert status["dispatch"] == "self"
+        assert status["rounds"] == number
+
+
+def test_self_review_must_identify_the_builder(reviewed_record, tmp_path):
+    record, _, _ = reviewed_record
+    _, report = _open_round(record)
+    report["reviewer"]["dispatch"] = "self"
+    with pytest.raises(ValueError, match="builder session"):
+        _submit(record, report, tmp_path)
+
+
+@pytest.mark.parametrize(
+    "check_id,passed", [("C01_wing", True), ("C02_unrelated", False)]
+)
+def test_internal_condition_uses_frozen_validation_check(
+    reviewed_record, tmp_path, check_id, passed
+):
+    record, state, _ = reviewed_record
+    structure = Path(state["mpd_path"]).with_name("structure.json")
+    pointer = record.path / "flow/current.json"
+    pointer.write_text(
+        json.dumps({"structure_sha256": review._hash(structure.read_bytes())})
+    )
+    state["artifacts"]["structure"] = {"sha256": review._hash(pointer.read_bytes())}
+    archived = record.snapshots_dir / "0001/report.json"
+    archived.parent.mkdir(parents=True)
+    validation = {
+        "ok": True,
+        "report_path": str(archived.relative_to(record.path)),
+        "source_sha256": record.source_sha256,
+        "flow": state,
+        "checks": [{"name": check_id, "passed": True}],
+    }
+    archived.write_text(json.dumps(validation))
+    record.report_path.write_bytes(archived.read_bytes())
+    _, report = _open_round(record)
+    report["conditions"][0].update(
+        status="structural_evidence_required",
+        evidence=[],
+        repair="Check internal joint",
+    )
+    receipt = _submit(record, report, tmp_path)
+    assert receipt["passed"] is passed
+    assert bool(receipt["remaining_items"]) is not passed
+    if passed:
+        assert receipt["structural_evidence"]["C01"] == [check_id]
+
+
+def test_compare_names_each_missing_reference_image(reviewed_record, tmp_path):
+    record, _, reference = reviewed_record
+    (reference / "goal-reverse.png").rename(reference / "reverse.png")
+    with pytest.raises(ValueError) as error:
+        review.compare_record(record, reference)
+    message = str(error.value)
+    assert "goal-reverse.png" in message
+    assert "goal-top.png" not in message
+    assert "goal-<camera>.png" in message
+    assert "top, reverse" in message
+
+
+def test_uncompared_fixed_render_points_to_compare_not_viewpoint_matching(
+    reviewed_record,
+):
+    record, _, _ = reviewed_record
+    (record.out_dir / "comparison.json").unlink()
+    portrait = record.path / "prompt.png"
+    Image.new("RGB", (100, 100), (80, 220, 140)).save(portrait)
+    record.meta_path.write_text(
+        json.dumps({"prompt": "Build a blue object", "prompt_image": portrait.name})
+    )
+    with pytest.raises(ValueError) as error:
+        review.review_instructions(record, parent_session_id="builder")
+    message = str(error.value)
+    assert f"brickwright external compare {record.id} --reference-dir" in message
+    assert "goal-top.png" in message
+    assert "render-angle" not in message
+    assert not (record.path / "reviews").exists()

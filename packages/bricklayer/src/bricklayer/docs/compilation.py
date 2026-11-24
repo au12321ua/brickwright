@@ -3,13 +3,23 @@
 from collections.abc import Callable
 from fractions import Fraction
 from functools import cache
+from inspect import getdoc
+from types import FunctionType
 from typing import Any
 
 from .. import colors, construction, geometry, modeling, parts
 from ..colors import Color, Finish
-from ..construction import COMPONENT_TYPES, CONSTRUCTION_HELPERS, VARIANT_ENUMS, fill
-from ..construction.registry import COMPONENT_FACTORIES, valid_part_kwarg_combos
+from ..construction import (
+    COMPONENT_TYPES,
+    CONSTRUCTION_HELPERS,
+    VARIANT_ENUMS,
+    fill,
+    registry,
+)
+from ..construction.registry import valid_part_kwarg_combos
 from ..geometry import PLATE, HeightLike, connections
+from ..io import writer
+from ..io.writer import to_ldraw, write_ldraw
 from ..ldraw import get_connector_type
 from ..modeling import articulation, assembly, transforms
 from ..modeling.build import LegoBuild, NameRef
@@ -21,23 +31,223 @@ from .utils import (
     bullet,
     document_definitions,
     document_function,
+    document_members,
     document_module,
     heading,
     paragraphs,
 )
 
+_PLACEMENT_MEMBERS = (
+    "add",
+    "add_raw",
+    "bounding_box",
+    "brick_count",
+    "copy",
+    "deepcopy",
+    "extend",
+    "flattened_placements",
+    "list_elements",
+    "name_of",
+    "named",
+    "names",
+    "placements",
+    "remove",
+    "stack",
+)
+_CONNECTION_MEMBERS = (
+    "connect",
+    "connection_endpoints",
+    "connectors",
+    "find_connection_candidates",
+    "place_connection",
+    "trial_connections",
+)
+_MOTION_MEMBERS = (
+    "check_motion",
+    "flattened_joints",
+    "joint",
+    "joints",
+    "posed",
+    "set_motion",
+)
+_VALIDATION_MEMBERS = (
+    "colliding_placements",
+    "connected_components",
+    "floating_placements",
+    "is_connected",
+    "is_valid",
+    "num_connected_components",
+)
+
+_TOPICS = {
+    "parts.md": (
+        "Find and choose parts",
+        "IDs, search, availability, factories and colors.",
+    ),
+    "placement.md": (
+        "Place and compose",
+        "Stack, repeat, name and nest parts or models.",
+    ),
+    "geometry.md": (
+        "Coordinates and transforms",
+        "Grid units, local frames, poses and model transforms.",
+    ),
+    "connections.md": (
+        "Connect and trial-fit",
+        "Endpoint position and axis, pair lookup, candidate poses and trial evidence.",
+    ),
+    "motion.md": (
+        "Set and check motion",
+        "Joint motion ranges, poses and sampled interference.",
+    ),
+    "validation-export.md": (
+        "Check and export",
+        "Collisions, unsupported parts, connected components and LDraw export.",
+    ),
+}
+
 
 @cache
 def api_reference() -> str:
-    """Compile the agent reference from module and API docstrings.
-
-    This manifest selects sections and class members; prose belongs with its
-    implementation. Factory choices and colors are read from their registries.
-    """
+    """Compile the full agent reference from module and API docstrings."""
     import bricklayer
 
-    sections = [
-        document_module(bricklayer, 1),
+    return (
+        paragraphs(
+            document_module(bricklayer, 1),
+            _geometry(),
+            _connectors(),
+            _parts(),
+            document_module(construction),
+            *(describe_component_factory(f, 3) for f in _factories()),
+            document_definitions(COMPONENT_TYPES + VARIANT_ENUMS, 3),
+            _list_available_colors(),
+            _placement(
+                _PLACEMENT_MEMBERS
+                + _CONNECTION_MEMBERS
+                + _MOTION_MEMBERS
+                + _VALIDATION_MEMBERS
+            ),
+            _assembly(),
+            _fill_helpers(),
+            _motion(),
+            _transformations(),
+        )
+        + "\n"
+    )
+
+
+def api_reference_pages() -> dict[str, str]:
+    """Compile focused Markdown pages from the installed SDK and its registries."""
+    factories = _factories()
+    argument_tables = {
+        factory: table
+        for factory in factories
+        if (table := list_valid_kwarg_combos(factory, 2))
+    }
+    pages = {
+        "index.md": paragraphs(
+            "# BrickLayer API by task",
+            "\n".join(
+                bullet(f"[{title}]({file}) — {description}")
+                for file, (title, description) in _TOPICS.items()
+            ),
+        ),
+        "parts.md": paragraphs(
+            _parts(),
+            document_definitions(
+                [
+                    ClassDoc(cls, constructor=False)
+                    for cls in (
+                        parts.PartCapabilities,
+                        parts.PartCapability,
+                        parts.PartDataSource,
+                        parts.PartEndpoint,
+                        parts.VerifiedMounting,
+                    )
+                ],
+                3,
+            ),
+            "### Color",
+            getdoc(Color) or "",
+            "Look up constants in the [color palette](colors.md).",
+            document_module(construction),
+            *(
+                paragraphs(
+                    document_function(factory, 3),
+                    f"[Valid arguments for `{factory.__name__}`](factories/{factory.__name__}.md)."
+                    if factory in argument_tables
+                    else "",
+                )
+                for factory in factories
+            ),
+            document_definitions(COMPONENT_TYPES + VARIANT_ENUMS, 3),
+        ),
+        "placement.md": paragraphs(_placement(_PLACEMENT_MEMBERS), _fill_helpers()),
+        "geometry.md": paragraphs(_geometry(), _transformations()),
+        "connections.md": paragraphs(
+            _connectors(),
+            _assembly(),
+            "### Inspect trial evidence",
+            "Pass a dict as `evidence` to the candidate lookup and trial calls. The "
+            "lookup records endpoint samples and filters. Trials record checks, rejection "
+            "counts and failed sample poses. Read a trial's `diagnostics` and "
+            "`motion_report` before choosing a candidate.",
+            "### LegoBuild connection methods",
+            document_members(LegoBuild, members=_CONNECTION_MEMBERS),
+            "For joint travel and sampling, see [motion](motion.md).",
+        ),
+        "motion.md": paragraphs(
+            _motion(),
+            "### LegoBuild motion methods",
+            document_members(LegoBuild, members=_MOTION_MEMBERS),
+            "For endpoint and mounting parameters, see [connections](connections.md).",
+        ),
+        "validation-export.md": paragraphs(
+            "### LegoBuild validation methods",
+            document_members(LegoBuild, members=_VALIDATION_MEMBERS),
+            "Use [the record workflow](../flow.md) for build validation and verified delivery.",
+            document_module(writer),
+            document_definitions([to_ldraw, write_ldraw], 3),
+            "Use `add_step` to mark an LDraw build step.",
+            document_members(
+                LegoBuild, members=("add_step", "remove_step", "step_markers", "steps")
+            ),
+        ),
+        "colors.md": _list_available_colors(1),
+        **{
+            f"factories/{factory.__name__}.md": paragraphs(
+                f"# `{factory.__name__}` argument combinations",
+                list_valid_kwarg_combos(factory, 2)
+                or "No combinations are enumerated.",
+                "See [parts](../parts.md) for the factory's signature and usage.",
+            )
+            for factory, table in argument_tables.items()
+        },
+    }
+    for file, (title, _) in _TOPICS.items():
+        pages[file] = paragraphs(f"# {title}", pages[file], "[API index](index.md).")
+    return {file: content.rstrip() + "\n" for file, content in pages.items()}
+
+
+def _factories() -> list[FunctionType]:
+    return sorted(registry.COMPONENT_FACTORIES, key=lambda factory: factory.__name__)
+
+
+def _fill_helpers() -> str:
+    return paragraphs(
+        document_module(fill), document_definitions(CONSTRUCTION_HELPERS, 3)
+    )
+
+
+def _transformations() -> str:
+    return paragraphs(
+        document_module(transforms), document_definitions(BUILD_TRANSFORMATIONS, 3)
+    )
+
+
+def _geometry() -> str:
+    return paragraphs(
         document_module(geometry),
         document_definitions(
             [
@@ -94,6 +304,11 @@ def api_reference() -> str:
             ],
             3,
         ),
+    )
+
+
+def _connectors() -> str:
+    return paragraphs(
         document_module(connections),
         document_definitions(
             [
@@ -117,6 +332,11 @@ def api_reference() -> str:
             ],
             3,
         ),
+    )
+
+
+def _parts() -> str:
+    return paragraphs(
         document_module(parts),
         document_definitions(
             DISCOVERY
@@ -140,13 +360,11 @@ def api_reference() -> str:
             ],
             3,
         ),
-        document_module(construction),
-        *[
-            describe_component_factory(f, heading_level=3)
-            for f in sorted(COMPONENT_FACTORIES, key=lambda f: f.__name__)
-        ],
-        document_definitions(COMPONENT_TYPES + VARIANT_ENUMS, 3),
-        _list_available_colors(),
+    )
+
+
+def _placement(members: tuple[str, ...]) -> str:
+    return paragraphs(
         document_module(modeling),
         document_definitions(
             [
@@ -157,46 +375,17 @@ def api_reference() -> str:
                 ),
                 ClassDoc(
                     LegoBuild,
-                    members=(
-                        "bounding_box",
-                        "brick_count",
-                        "colliding_placements",
-                        "connected_components",
-                        "connectors",
-                        "flattened_placements",
-                        "floating_placements",
-                        "names",
-                        "num_connected_components",
-                        "placements",
-                        "joints",
-                        "flattened_joints",
-                        "add",
-                        "add_raw",
-                        "connect",
-                        "connection_endpoints",
-                        "find_connection_candidates",
-                        "trial_connections",
-                        "place_connection",
-                        "joint",
-                        "set_motion",
-                        "posed",
-                        "check_motion",
-                        "copy",
-                        "deepcopy",
-                        "extend",
-                        "is_connected",
-                        "is_valid",
-                        "list_elements",
-                        "name_of",
-                        "named",
-                        "remove",
-                        "stack",
-                    ),
+                    members=members,
                 ),
                 ("NameRef", NameRef),
             ],
             3,
         ),
+    )
+
+
+def _assembly() -> str:
+    return paragraphs(
         document_module(assembly),
         document_definitions(
             [
@@ -252,8 +441,11 @@ def api_reference() -> str:
             ],
             3,
         ),
-        document_module(fill),
-        document_definitions(CONSTRUCTION_HELPERS, 3),
+    )
+
+
+def _motion() -> str:
+    return paragraphs(
         document_module(articulation),
         document_definitions(
             [
@@ -292,21 +484,18 @@ def api_reference() -> str:
             ],
             3,
         ),
-        document_module(transforms),
-        document_definitions(BUILD_TRANSFORMATIONS, 3),
-    ]
-    return "\n\n".join(sections).rstrip() + "\n"
+    )
 
 
-def _list_available_colors() -> str:
+def _list_available_colors(level: int = 3) -> str:
     """List every color, grouped into a subsection per surface finish."""
-    blocks = [document_module(colors, 3)]
+    blocks = [document_module(colors, level)]
     for finish in Finish:
         names = [f"`{c!r}`" for c in Color if c.finish is finish]
         if not names:
             continue
         blocks.append(
-            f"#### {finish.display_name}\n\n{finish.__doc__}\n\n{', '.join(names)}"
+            f"{heading(finish.display_name, level + 1)}\n\n{finish.__doc__}\n\n{', '.join(names)}"
         )
     return "\n\n".join(blocks)
 

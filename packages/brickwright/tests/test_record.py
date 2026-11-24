@@ -4,7 +4,6 @@ import re
 
 import pytest
 
-from brickwright.config import Config, Effort
 from brickwright.record import (
     ID_PATTERN,
     Meta,
@@ -20,11 +19,11 @@ from brickwright.record import (
 class TestMetaUpdate:
     def test_update_meta_merges_and_persists(self, config):
         rec = Record.create(config, prompt="x")
-        meta = rec.update_meta(status=Status.VALID, turns=3)
+        meta = rec.update_meta(status=Status.VALID, validations=3)
         assert isinstance(meta, Meta)
         reloaded = Record.load(config, rec.id).read_meta()
         assert reloaded.status is Status.VALID
-        assert reloaded.turns == 3
+        assert reloaded.validations == 3
         assert reloaded.prompt == "x"  # untouched
 
     def test_update_meta_rejects_unknown_fields(self, config):
@@ -33,17 +32,12 @@ class TestMetaUpdate:
             rec.update_meta(bogus="nope")
 
 
-@pytest.mark.parametrize("directory", ["snapshots_dir", "viewpoints_dir"])
-def test_numbered_history_continues_after_gaps(record, directory):
-    parent = getattr(record, directory)
+def test_numbered_history_continues_after_gaps(record):
+    parent = record.snapshots_dir
     parent.mkdir()
     (parent / "001").mkdir()
     (parent / "003").mkdir()
-    if directory == "snapshots_dir":
-        created = record.add_snapshot("source", "{}").path
-    else:
-        created = record.new_viewpoint_session()
-    assert created.name == "004"
+    assert record.add_snapshot("source", "{}").name == "004"
 
 
 def test_snapshot_order_remains_chronological_after_999(record):
@@ -65,28 +59,16 @@ class TestCreate:
         rec = Record.create(config, prompt="x")
         assert "def create_build(" in rec.read_build()
 
-    def test_records_prompt_and_metadata(self, tmp_path):
-        # model and effort come from the config
-        config = Config(
-            records_dir=tmp_path / "records", model="m1", effort=Effort.HIGH
-        )
+    def test_records_prompt_and_metadata(self, config):
+        config = config.model_copy(update={"flow": True, "flow_review_rounds": 3})
         rec = Record.create(config, prompt="a red tower")
         meta = rec.read_meta()
         assert meta.prompt == "a red tower"
-        assert meta.generation.model == "m1"
-        assert meta.generation.effort is Effort.HIGH
         assert meta.status is Status.CREATED
         assert meta.id == rec.id
-        assert meta.usage is None  # populated once the driver runs
-        assert meta.timing is None  # populated once the run finishes
-
-    def test_external_defaults_to_false(self, config):
-        meta = Record.create(config, prompt="x").read_meta()
-        assert meta.generation.external is False
-
-    def test_external_flag_is_recorded(self, config):
-        meta = Record.create(config, prompt="x", external=True).read_meta()
-        assert meta.generation.external is True
+        assert meta.flow_review_rounds == 3
+        assert meta.timing is None
+        assert meta.tool_calls == {}
 
     def test_image_prompt_is_copied_in(self, config, tmp_path, png_bytes):
         img = tmp_path / "ref.png"

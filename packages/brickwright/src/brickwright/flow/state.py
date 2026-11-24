@@ -74,6 +74,11 @@ def _snapshot_dir(record: Record, snapshot_id: str) -> Path:
     return record.path / "flow" / "snapshots" / snapshot_id
 
 
+def _snapshot_id(inputs: StructureInputs, mpd_sha256: str | None) -> str:
+    key = {"inputs": inputs.model_dump(mode="json"), "mpd": mpd_sha256}
+    return sha256(json.dumps(key, sort_keys=True).encode()).hexdigest()
+
+
 def save_structure(
     record: Record,
     inputs: StructureInputs,
@@ -83,11 +88,7 @@ def save_structure(
 ) -> None:
     if not inputs.current(record):
         return
-    snapshot_key = {
-        "inputs": inputs.model_dump(mode="json"),
-        "mpd": structure.mpd_sha256,
-    }
-    snapshot_id = sha256(json.dumps(snapshot_key, sort_keys=True).encode()).hexdigest()
+    snapshot_id = _snapshot_id(inputs, structure.mpd_sha256)
     directory = _snapshot_dir(record, snapshot_id)
     if mpd is not None:
         atomic_write(directory / "build.ldr", mpd)
@@ -109,7 +110,11 @@ def _current_structure(
 ) -> tuple[PublishedStructure | None, StructureReport | None, Path | None]:
     try:
         pointer = PublishedStructure.model_validate_json(_pointer(record).read_bytes())
-        if pointer.schema_version != VERSION or not pointer.inputs.current(record):
+        if (
+            pointer.schema_version != VERSION
+            or pointer.snapshot_id != _snapshot_id(pointer.inputs, pointer.mpd_sha256)
+            or not pointer.inputs.current(record)
+        ):
             return pointer, None, None
         directory = _snapshot_dir(record, pointer.snapshot_id)
         mpd = directory / "build.ldr"
@@ -119,13 +124,17 @@ def _current_structure(
         if file_sha256(mpd) != pointer.mpd_sha256:
             return pointer, None, None
         report = StructureReport.model_validate_json(report_bytes)
+        if report.mpd_sha256 != pointer.mpd_sha256:
+            return pointer, None, None
         return pointer, report, mpd if pointer.mpd_sha256 else None
     except (OSError, ValueError):
         return None, None, None
 
 
-def delivery_stamp(record: Record, prompt_image: str | None) -> str:
-    """Bind the current completion marker to the stored flow inputs and output."""
+def delivery_stamp(
+    record: Record, prompt_image: str | None, *, output_sha256: str | None = None
+) -> str:
+    """Hash the delivery evidence, optionally using the intended output digest."""
     paths = [
         "task.json",
         "conditions.json",
@@ -134,11 +143,11 @@ def delivery_stamp(record: Record, prompt_image: str | None) -> str:
         "merge-manifest.json",
         "flow/current.json",
         "review.json",
-        "out/build.ldr",
     ]
     if prompt_image:
         paths.append(prompt_image)
     manifest = {name: file_sha256(record.path / name) for name in paths}
+    manifest["out/build.ldr"] = output_sha256 or file_sha256(record.ldr_path)
     return sha256(json.dumps(manifest, sort_keys=True).encode()).hexdigest()
 
 
@@ -149,6 +158,7 @@ def flow_status(record: Record, *, include_review: bool = True) -> dict[str, Any
         "rounds": 0,
         "remaining_items": [],
         "current": False,
+        "dispatch": None,
     }
     if meta.flow is None:
         return {
@@ -157,6 +167,7 @@ def flow_status(record: Record, *, include_review: bool = True) -> dict[str, Any
             "diagnostics": [],
             "snapshot_id": None,
             "mpd_path": None,
+            "mpd_sha256": None,
             "structural_passed": False,
             "artifacts": {},
             "review": empty_review,
@@ -218,7 +229,7 @@ def flow_status(record: Record, *, include_review: bool = True) -> dict[str, Any
             diagnostics.append(artifact_error(record, "review", str(exc)))
         if review_snapshot is None:
             review = empty_review | {"rounds": review.get("rounds", 0)}
-        budget = (meta.generation.config or {}).get("flow_review_rounds", 2)
+        budget = meta.flow_review_rounds
         remaining = review.get("remaining_items")
         rounds = review.get("rounds")
         if review.get("current") is True and type(rounds) is int and rounds > 0:
@@ -240,8 +251,8 @@ def flow_status(record: Record, *, include_review: bool = True) -> dict[str, Any
                 Diagnostic(
                     code="flow.review",
                     stage="flow",
-                    message="A complete independent review of the current structural snapshot is required.",
-                    next_action=f"brickwright external review {record.id} --help",
+                    message="Review the current structural snapshot in the builder session or with a separate reviewer.",
+                    next_action=f"brickwright external review-instructions {record.id}",
                 )
             )
     artifacts = {}
@@ -287,6 +298,7 @@ def flow_status(record: Record, *, include_review: bool = True) -> dict[str, Any
         "diagnostics": [issue.model_dump(mode="json") for issue in diagnostics],
         "snapshot_id": snapshot_id,
         "mpd_path": str(mpd.resolve()) if mpd else None,
+        "mpd_sha256": pointer.mpd_sha256 if pointer and mpd else None,
         "structural_passed": structural_passed,
         "artifacts": artifacts,
         "review": review,

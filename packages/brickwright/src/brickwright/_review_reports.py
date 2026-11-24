@@ -1,4 +1,4 @@
-"""Validate the reports returned by independent visual reviewers."""
+"""Validate the reports returned by the host or a separate visual reviewer."""
 
 from __future__ import annotations
 
@@ -75,12 +75,15 @@ class Reviewer(ReviewModel):
     parent_session_id: Nonempty
     model: Nonempty
     effort: Nonempty
-    dispatch: Literal["codex_subagent", "independent_model"]
+    dispatch: Literal["self", "subagent", "codex_subagent", "independent_model"]
     image_reads: list[Nonempty] = Field(min_length=1)
 
     @model_validator(mode="after")
-    def require_independence(self) -> Reviewer:
-        if self.session_id == self.parent_session_id:
+    def check_session(self) -> Reviewer:
+        if self.dispatch == "self":
+            if self.session_id != self.parent_session_id:
+                raise ValueError("a self-review must use the builder session")
+        elif self.session_id == self.parent_session_id:
             raise ValueError("the reviewer must run in a separate session")
         return self
 
@@ -111,14 +114,19 @@ REVIEW_GUIDANCE = """Use this round's manifest and frozen files to compare the c
 Pixel coordinates start at the top left. Each box is [left, top, right, bottom]
 with right and bottom excluded.
 
-Review the original conditions first, then every feature. For a condition
-requiring internal structural evidence, use structural_evidence_required and
-describe the verification needed. Apply simplified only when the corresponding
-feature explicitly records a simplification and the candidate follows it.
+Review the original conditions first, then every feature. Use
+structural_evidence_required for conditions you cannot verify from the images
+because they need internal structural evidence, and describe the verification
+needed. BrickWright verifies those conditions with the record's frozen checks
+and lists any unresolved condition as a remaining item that prevents the round
+from passing.
+Apply simplified only when the corresponding feature explicitly records a
+simplification and the candidate follows it.
 Report additional visible discrepancies in findings. Give the original check ID
 when relevant, otherwise cite the target view and region only. Flag a finding as
 required when it must be addressed to satisfy the task or keep an essential
 feature. Include observable evidence and a practical repair for each open item.
-Return passed only if all original conditions and all required features are
-satisfied and no required finding remains. Review the supplied images and task
-files only. Return the report to the parent for submission."""
+Return passed only if all other original conditions are satisfied, all required
+features are retained or have the agreed simplification, and no required
+finding remains. Review the supplied images and task files only. Return the
+report to the parent for submission."""

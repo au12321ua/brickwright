@@ -5,7 +5,7 @@
 验证始终检查碰撞和悬空，附加检查由记录的 `run_tests()` 提供。
 模型可包含多个独立支撑的组件，单一连通组件可按任务需要作为额外测试。
 
-验证和正式导出都通过[子进程](../../packages/brickwright/src/brickwright/tools/build_execution.py)
+普通记录的验证和正式导出都通过[子进程](../../packages/brickwright/src/brickwright/tools/build_execution.py)
 执行捕获的源码快照。验证报告用 SHA-256 关联实际检查的源码。
 如果写回报告时检测到源码变化，记录 `SourceChanged`，需要对当前源码重新验证。
 [`Record.write_build`](../../packages/brickwright/src/brickwright/record.py)
@@ -18,15 +18,17 @@
 相关行为由[验证测试](../../packages/brickwright/tests/tools/test_validation.py)和
 [正式导出测试](../../packages/brickwright/tests/tools/test_finalization.py)覆盖。
 
+流程记录定稿时复核结构快照与评审状态，从已验证快照原样复制 MPD 到 `out/build.ldr`。复制后会再次核对快照、评审和交付依据。[流程定稿实现](../../packages/brickwright/src/brickwright/tools/finalization.py)
+
 ## 代理收到的诊断
 
-内置工具和外部 CLI 在失败报告的 `diagnostics` 中给出原因码、失败阶段、说明、证据及可行的下一步。源码异常指向实际执行快照中的用户代码，静态或运动验证失败可定位到实例、零件对和采样姿态。验证报告的 `report_path` 相对于记录目录，指向此次验证的存档。历史报告缺少诊断字段时按空列表读取。
+workflow 接口和外部 CLI 在失败报告的 `diagnostics` 中给出原因码、失败阶段、说明、证据及可行的下一步。源码异常指向实际执行快照中的用户代码，静态或运动验证失败可定位到实例、零件对和采样姿态。验证报告的 `report_path` 相对于记录目录，指向此次验证的存档。历史报告缺少诊断字段时按空列表读取。
 
-正式导出从嵌套的 `validation.diagnostics` 传递模型验证问题。模型通过检查后发生的渲染或导出错误出现在正式导出报告自己的 `diagnostics` 中。知识库可用稳定原因码检索，例如 `brickwright knowledge search connector.ambiguous`。[诊断数据结构](../../packages/brickwright/src/brickwright/tools/diagnostics.py) · [执行入口一致性测试](../../packages/brickwright/tests/tools/test_execution_diagnostics.py) · [从歧义孔位修复到导出](../../packages/brickwright/tests/tools/test_connection_repair.py)
+正式导出从嵌套的 `validation.diagnostics` 传递模型验证问题。模型通过检查后发生的渲染或导出错误出现在正式导出报告自己的 `diagnostics` 中。知识库可用稳定原因码检索，例如 `brickwright knowledge search connector.ambiguous`。[诊断数据结构](../../packages/brickwright/src/brickwright/tools/diagnostics.py) · [执行诊断测试](../../packages/brickwright/tests/tools/test_execution_diagnostics.py) · [从歧义孔位修复到导出](../../packages/brickwright/tests/tools/test_connection_repair.py)
 
 ## 连接查询与试装证据
 
-内置代理的探索和外部代理的 Python 脚本可以调用同一 SDK，再查看两个证据字典。
+宿主代理的 Python 脚本可以调用同一 SDK，再查看两个证据字典。
 
 ```python
 query = {}
@@ -46,4 +48,8 @@ print(query, trials)
 
 创建记录时指定 `--flow --task-json FILE` 可导入原始条件。先通过 `external features` 和 `external plan` 记录特征与事先声明的独立物件、装饰简化项以及模块接口。每次整件验证同时检查记录内模型与干净进程中从相同 MPD 字节重读的标准模型，核对件数、连通组件、具体断口、碰撞和支撑。可检索的报告保留完整实例清单，代理收到结构摘要和报告位置。[结构接口](../../packages/brickwright/src/brickwright/flow/structure.py) · [两种 SDK 的归档复放](p004-structure-evaluation.md)
 
-`external status ID` 显示结构快照、当前评审和阻断条件。模块接口必须实际接合。装饰断口只在有事前声明、同件对与位姿的版本化缺项证据且两栏物理检查均合格时列为交付限制。改动父源码、规划、合并清单或校验数据会使结构证据过期。渲染、评审和定稿绑定已检查的整件。最后一轮需要修改时，只有有效预算用尽、当前版已评且列明遗留项，才允许带遗留项交付。[U-09](../decisions.md#u-09--有证据的装饰接口缺项可带限制放行) · [状态计算](../../packages/brickwright/src/brickwright/flow/state.py)
+`external status ID` 显示结构快照、当前评审和阻断条件。模块接口必须实际接合。装饰断口只在有事前声明、同件对与位姿的版本化缺项证据且两栏物理检查均合格时列为交付限制。改动父源码、规划、合并清单或校验数据会使结构证据过期。渲染、评审和定稿绑定已检查的整件。最后一轮需要修改时，只有有效预算用尽、当前版已评且列明遗留项，才允许带遗留项交付。预算按整条记录累计已接受的评审轮次，默认 2 轮，可在 `external init --review-rounds N` 时设定。对比要求参考目录按机位名提供 `goal-<机位>.png`，缺图时报出缺少的文件名。已按机位渲染而未对比时，`review-instructions` 提示先运行 `compare`，不再转入视角匹配。[U-09](../decisions.md#u-09--有证据的装饰接口缺项可带限制放行) · [状态计算](../../packages/brickwright/src/brickwright/flow/state.py)
+
+## demo 交付接收
+
+`brickwright external verify-delivery ID FILE` 读取当前流程记录。成功定稿后，接收端核对提交文件、导出件和已验证的结构快照的 MPD 字节，并返回快照 ID、MPD 摘要及实际评审方式。只做过验证、定稿失败、版本过期或提交文件有改动均拒收。单题评分器先核对原始题目再使用同一接口。[交付校验](../../packages/brickwright/src/brickwright/tools/finalization.py) · [单题接收端](../../demo/omr36/native_record.py)

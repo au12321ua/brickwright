@@ -5,7 +5,7 @@ Status: accepted
 ## 问题与目标
 
 现有评审由视角匹配代理先找机位，再让评审模型比较参考图和渲染图，返回一段差异描述和“是否完成”。
-[视觉评审](../../packages/brickwright/src/brickwright/driver/critique.py) · [视角匹配](../../packages/brickwright/src/brickwright/driver/viewpoint.py)
+视觉评审（`git show e88513e:packages/brickwright/src/brickwright/driver/critique.py`） · 视角匹配（`git show e88513e:packages/brickwright/src/brickwright/driver/viewpoint.py`）
 现有 CLI 提供四个标准视角及按方位角、仰角渲染的单张图。基线六题都尝试过按题目机位自行渲染或对照，有的手调缩放或视场角，有的修改软件光栅器。共享实现需要给出跨题、跨版本可复现的投影与评分。
 评审结论不指向具体特征，也不说明依据，代理难以据此修改。
 

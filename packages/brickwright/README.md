@@ -1,73 +1,41 @@
-# BrickWright
+# BrickWright CLI
 
-**BrickWright** is an agentic framework for creating LEGO® builds with
-[BrickLayer](https://github.com/AvaLovelace1/brickwright/tree/main/packages/bricklayer). Using BrickWright,
-you can direct your favorite AI agents (GPT, Claude, Gemini, etc.) to automatically create brick builds from text or
-image prompts and export them to [LDraw](https://www.ldraw.org/).
+从仓库根目录运行以下命令。首次使用先按[安装说明](../../README.md#搭第一个模型)安装工作区和宿主 skill。安装命令打印 `SKILL.md` 的路径，里面有 SDK 解释器和可运行的两砖示例。更新已有安装时，若工具提示文件内容有变，用同一目标和 `--replace` 重新安装。
 
-## Usage
-
-### 1. Install prerequisites
-
-Install the BrickWright CLI. We recommend using [uv](https://docs.astral.sh/uv/):
+## 建立普通记录
 
 ```sh
-uv tool install brickwright
+uv run brickwright external init '把一块蓝砖叠在红砖上'
 ```
 
-#### LDraw parts library (optional but recommended)
-
-BrickWright can render a build to a preview image, letting the agent visually check a build. To enable rendering,
-you must download the [LDraw parts library](https://library.ldraw.org/updates?latest) and set the environment
-variable `$LDRAW_LIBRARY_PATH` to its path. Without a library, the rendering tool is disabled.
-
-### 2. Start creating!
-
-#### Option 1: External Agent (e.g. Codex, Claude Code)
-
-Simply prompt your favorite agent to create a brick build following the instructions
-in [EXTERNAL_AGENT_INSTRUCTIONS.md](https://github.com/AvaLovelace1/brickwright/blob/main/packages/brickwright/EXTERNAL_AGENT_INSTRUCTIONS.md).
-
-#### Option 2: API key (e.g. OpenAI Platform, Claude Console)
-
-Ensure that the key for your favorite AI provider is set as an environment
-variable (e.g., `$ANTHROPIC_API_KEY`, `$OPENAI_API_KEY`).
-
-```
-export OPENAI_API_KEY="sk-XXX"
-# OR
-export ANTHROPIC_API_KEY="XXX"
-```
-
-Then, run `brickwright generate`:
-
-```zsh
-brickwright generate "a detailed cruise ship" [--image ref.png] [--model M] [--effort E]
-```
-
-Specify the generation model (e.g. `claude-opus-4-8`, `gpt-5`) with `--model` or by setting the environment variable
-`$BRICKWRIGHT_GENERATION_MODEL`.
-You can run `litellm.get_valid_models()` for a list of available models based on your environment's set API keys.
-
-Results are saved to `--records-dir` (default `./records`, or `$BRICKWRIGHT_RECORDS_DIR`
-if set).
-
-Run `brickwright generate --help` for more options.
-
-### Building knowledge
-
-Search the bundled guides by build task, part ID, or diagnostic code. Open a matching
-ID to get the steps, runnable example, expected checks, and sources. Searches with a
-part ID in the guides also report that part’s capabilities from the installed catalog.
+记下返回的 `record_id` 和 `build_path`。编辑后者，按安装好的 skill 示例定义 `create_build()` 和 `run_tests()`。以下命令中的 `ID` 均替换为该记录的 `record_id`。
 
 ```sh
-brickwright knowledge search 'a hatch that hits the surrounding bodywork'
-brickwright knowledge show aircraft-wing-and-hatch
+uv run brickwright external validate ID
+uv run brickwright external finalize ID
 ```
 
-The same search and read operations are available in Python as `search_knowledge` and
-`read_knowledge` from `brickwright.knowledge`.
+检查失败时从报告的 `diagnostics` 查看具体位置和原因，修改后再验证。成功定稿后，记录目录下的 `out/build.ldr` 可在 LDraw 查看器中打开。记录默认位于当前目录的 `records/`，可设置 `BRICKWRIGHT_RECORDS_DIR` 或为各记录命令指定同一个 `--records-dir DIR`。
 
----
+## 找搭法和 SDK 参数
+
+```sh
+uv run brickwright knowledge search '舱门翻开'
+uv run brickwright knowledge show hinged-panels
+```
+
+搜索也接受零件号和诊断码。返回的 `path` 相对于安装好的 skill 目录。`show` 可直接读取条目、示例和来源。查方法签名时，从该目录的 API 索引选一个主题，或按符号名搜索。[BrickLayer SDK](../bricklayer/README.md#api-reference)
+
+## 交付带参考图的任务
+
+用 `external init "题目摘要" --flow --task-json task.json` 开始流程记录。先提交特征和规划，验证整件，再按题目机位渲染并评审当前版本。主代理可以自评。`external status ID` 会列出当前快照和阻断项。命令顺序和必需输入见[流程说明](src/brickwright/skill/references/flow.md)。
+
+成功执行 `external finalize ID` 后，把该记录的 `out/build.ldr` 原样复制到题目指定的位置。使用同一个 `--records-dir` 或保留原工作目录和环境设置运行接收命令，将 `model.mpd` 换成实际提交文件的路径。
+
+```sh
+uv run brickwright external verify-delivery ID model.mpd
+```
+
+仅当提交的 MPD、当前成功定稿的导出和已验证快照的字节一致时通过，结果包含快照 ID、SHA-256 和评审方式。单题 demo 的交付位置和接收端见 [OMR36 演示](../../demo/omr36/README.md)。
 
 *LEGO® is a trademark of the LEGO Group, which does not sponsor, authorize, or endorse this project.*

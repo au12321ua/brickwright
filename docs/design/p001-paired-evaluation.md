@@ -1,6 +1,6 @@
 # P-001 新旧代理配对验收
 
-原生代理对照待运行。Maestro 另以 Codex 外部代理运行配对实验，使用同一套成品计量与盲评规则。见 [P-001 验收](../proposals/P-001-connection-driven-building.md#验收) 和 [U-05](../decisions.md#u-05--连接放置的配对验收)。
+此页记录原生代理对照协议和外部运行。原生对照未运行，其命令对应 P-008 前的版本（如 `2f99238`）。Maestro 另以 Codex 外部代理运行配对实验，使用同一套成品计量与盲评规则。见 [P-001 验收](../proposals/P-001-connection-driven-building.md#验收) 和 [U-05](../decisions.md#u-05--连接放置的配对验收)。
 
 ## 冻结实验计划
 

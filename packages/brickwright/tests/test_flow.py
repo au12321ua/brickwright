@@ -1,5 +1,9 @@
 import json
+from hashlib import sha256
 from pathlib import Path
+
+import pytest
+from typer.testing import CliRunner
 
 from brickwright.config import Config
 from brickwright.flow import flow_status, read_artifact, set_artifact
@@ -194,6 +198,279 @@ def test_current_review_publishes_exact_bytes_and_source_edits_expire_it(
     assert not record.ldr_path.exists()
 
 
+@pytest.fixture
+def delivery_record(tmp_path, in_process, monkeypatch):
+    from brickwright.flow import integrations, state
+    from brickwright.tools import rendering
+
+    record = _record(tmp_path)
+    _ready(record)
+    monkeypatch.setattr(rendering, "render_available", lambda: False)
+    monkeypatch.setattr(integrations, "delivery_review_current", lambda _record: True)
+    monkeypatch.setattr(
+        state,
+        "review_status",
+        lambda _record, snapshot_id: {
+            "passed": True,
+            "rounds": 1,
+            "remaining_items": [],
+            "current": bool(snapshot_id),
+            "dispatch": "self",
+        },
+    )
+    return record
+
+
+def test_delivery_cli_accepts_a_self_reviewed_copy(tmp_path, in_process, monkeypatch):
+    from PIL import Image
+
+    from brickwright import aligned_review
+    from brickwright.cli import app
+    from brickwright.tools import rendering, verify_delivery
+
+    record = _record(tmp_path)
+    _ready(record)
+    record.write_build(
+        STACK.replace(
+            "    return []",
+            "    from brickwright import TestContext\n"
+            "    checks = TestContext(create_build())\n"
+            "    checks.check('C02_connected', checks.build.num_connected_components == 1)\n"
+            "    return checks.report()",
+        )
+    )
+    checked = validate(record)
+    assert checked.ok and checked.flow is not None and checked.report_path is not None
+    frozen_mpd = Path(checked.flow["mpd_path"])
+    archived_report = (record.path / checked.report_path).read_bytes()
+
+    cameras = tmp_path / "cameras.json"
+    cameras.write_text(
+        json.dumps(
+            {
+                "image_pixels": [16, 16],
+                "projection": "perspective",
+                "views": {
+                    "side": {
+                        "eye": [0, 0, 120],
+                        "target": [0, 0, 0],
+                        "up": [0, -1, 0],
+                        "vertical_fov_degrees": 30,
+                    }
+                },
+            }
+        )
+    )
+    target = tmp_path / "goal-side.png"
+    Image.new("RGBA", (16, 16), (180, 32, 32, 255)).save(target)
+
+    def render_frozen(model, _spec, output):
+        assert model.read_bytes() == frozen_mpd.read_bytes()
+        output.mkdir()
+        frame = output / "side.png"
+        frame.write_bytes(target.read_bytes())
+        return {"side": frame}
+
+    monkeypatch.setattr(aligned_review, "render_model", render_frozen)
+    monkeypatch.setattr(
+        aligned_review, "run_in_subprocess", lambda fn, args, _: fn(*args)
+    )
+    monkeypatch.setattr(rendering, "render_available", lambda: False)
+    aligned_review.render_cameras(record, cameras)
+    aligned_review.compare_record(record, tmp_path)
+    aligned_review.review_instructions(record, parent_session_id="builder")
+    manifest_bytes = next(
+        (record.path / "reviews").glob("*/inputs/manifest.json")
+    ).read_bytes()
+    manifest = json.loads(manifest_bytes)
+    evidence = [{"view": "side", "bbox": [0, 0, 16, 16], "observation": "Red stack."}]
+    receipt = tmp_path / "review.json"
+    receipt.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "round_id": manifest["round_id"],
+                "input_sha256": sha256(manifest_bytes).hexdigest(),
+                "reviewer": {
+                    "session_id": "builder",
+                    "parent_session_id": "builder",
+                    "model": "test",
+                    "effort": "test",
+                    "dispatch": "self",
+                    "image_reads": manifest["image_reads"],
+                },
+                "conditions": [
+                    {
+                        "id": "C01",
+                        "status": "satisfied",
+                        "explanation": "Both bricks are red.",
+                        "evidence": evidence,
+                    },
+                    {
+                        "id": "C02",
+                        "status": "structural_evidence_required",
+                        "explanation": "Contact is inside the assembly.",
+                        "evidence": [],
+                        "repair": "Check that both bricks form one component.",
+                    },
+                ],
+                "features": [
+                    {"id": feature_id, "status": "retained", "evidence": evidence}
+                    for feature_id in ("F1", "F2")
+                ],
+                "findings": [],
+                "verdict": "passed",
+            }
+        )
+    )
+    review = aligned_review.submit_review(record, receipt)
+    assert review["passed"]
+    assert review["structural_evidence"] == {"C02": ["C02_connected"]}
+    result = finalize(record)
+    assert result.ok and result.flow is not None
+    assert record.report_path.read_bytes() != archived_report
+    assert aligned_review.review_inputs_current(record, manifest["round_id"])
+    submission = tmp_path / "submission.mpd"
+    submission.write_bytes(record.ldr_path.read_bytes())
+    sdk = verify_delivery(record, submission)
+    assert sdk.ok
+    assert sdk.review_dispatch == "self"
+    command = [
+        "external",
+        "verify-delivery",
+        record.id,
+        str(submission),
+        "--records-dir",
+        str(tmp_path),
+    ]
+
+    cli = CliRunner()
+    accepted = cli.invoke(app, command)
+    assert accepted.exit_code == 0, accepted.output
+    report = json.loads(accepted.stdout)
+    assert report["ok"]
+    assert report["snapshot_id"] == result.flow["snapshot_id"]
+    assert report["mpd_sha256"] == manifest["model_sha256"]
+    assert report["review_outcome"] == "passed"
+    assert report["review_dispatch"] == "self"
+
+    with submission.open("ab") as file:
+        file.write(b"\n")
+    rejected = cli.invoke(app, command)
+    assert rejected.exit_code == 1
+    assert json.loads(rejected.stdout)["ok"] is False
+    submission.write_bytes(record.ldr_path.read_bytes())
+    target.unlink()
+    assert not verify_delivery(record, submission).ok
+
+
+def test_delivery_requires_finalize_even_if_checked_bytes_were_copied(delivery_record):
+    from brickwright.tools.finalization import verify_delivery
+
+    result = validate(delivery_record)
+    assert result.ok and result.flow is not None and result.flow["ready"]
+    frozen = Path(result.flow["mpd_path"])
+    delivery_record.ldr_path.write_bytes(frozen.read_bytes())
+    assert not verify_delivery(delivery_record, frozen).ok
+
+
+def test_delivery_requires_a_submission_and_a_flow(delivery_record, tmp_path):
+    from brickwright.tools.finalization import verify_delivery
+
+    assert finalize(delivery_record).ok
+    assert not verify_delivery(delivery_record, tmp_path / "missing.mpd").ok
+    legacy = Record.create(Config(records_dir=tmp_path, flow=False))
+    legacy.write_build(STACK)
+    assert finalize(legacy).ok
+    assert not verify_delivery(legacy, legacy.ldr_path).ok
+
+
+@pytest.mark.parametrize(
+    "corrupted",
+    [
+        "build.py",
+        "conditions.json",
+        "out/build.ldr",
+        "flow/current.json",
+        "snapshot-mpd",
+        "snapshot-report",
+        "missing-snapshot",
+    ],
+)
+def test_delivery_rejects_changed_evidence(delivery_record, corrupted, tmp_path):
+    from brickwright.tools.finalization import verify_delivery
+
+    result = finalize(delivery_record)
+    assert result.ok and result.flow is not None
+    frozen = Path(result.flow["mpd_path"])
+    submission = tmp_path / "submission.mpd"
+    submission.write_bytes(frozen.read_bytes())
+    if corrupted == "missing-snapshot":
+        frozen.unlink()
+    else:
+        path = {
+            "snapshot-mpd": frozen,
+            "snapshot-report": frozen.with_name("structure.json"),
+        }.get(corrupted, delivery_record.path / corrupted)
+        path.write_bytes(path.read_bytes() + b"\n")
+    assert not verify_delivery(delivery_record, submission).ok
+
+
+def test_delivery_rejects_previous_version_and_expired_catalog(
+    delivery_record, tmp_path, monkeypatch
+):
+    from brickwright.flow import state
+    from brickwright.tools.finalization import verify_delivery
+
+    assert finalize(delivery_record).ok
+    previous = tmp_path / "previous.mpd"
+    previous.write_bytes(delivery_record.ldr_path.read_bytes())
+    delivery_record.write_build(STACK.replace("Color.RED", "Color.BLUE"))
+    assert not verify_delivery(delivery_record, previous).ok
+    assert finalize(delivery_record).ok
+    assert not verify_delivery(delivery_record, previous).ok
+    assert verify_delivery(delivery_record, delivery_record.ldr_path).ok
+    monkeypatch.setattr(state, "catalog_sha256", lambda: "new catalog")
+    assert not verify_delivery(delivery_record, delivery_record.ldr_path).ok
+
+
+def test_delivery_rejects_after_failed_refinalize(
+    delivery_record, tmp_path, monkeypatch
+):
+    from brickwright.tools import rendering
+    from brickwright.tools.finalization import verify_delivery
+
+    assert finalize(delivery_record).ok
+    submission = tmp_path / "submission.mpd"
+    submission.write_bytes(delivery_record.ldr_path.read_bytes())
+    monkeypatch.setattr(rendering, "render_available", lambda: True)
+
+    def fail(*_):
+        raise RuntimeError("render unavailable")
+
+    monkeypatch.setattr(rendering, "_convert", fail)
+    assert not finalize(delivery_record).ok
+    assert not verify_delivery(delivery_record, submission).ok
+
+
+def test_finalize_rejects_a_changed_gate_during_publication(
+    delivery_record, monkeypatch
+):
+    from brickwright.tools import rendering
+
+    def edit_features(*_):
+        path = delivery_record.path / "features.json"
+        path.write_bytes(path.read_bytes() + b"\n")
+
+    monkeypatch.setattr(rendering, "render_available", lambda: True)
+    monkeypatch.setattr(rendering, "_convert", edit_features)
+    monkeypatch.setattr(rendering, "mesh2png", lambda *_: None)
+    result = finalize(delivery_record)
+    assert not result.ok
+    assert not delivery_record.read_meta().finalized
+    assert not delivery_record.ldr_path.exists()
+
+
 def test_only_positive_round_budget_and_listed_issues_permit_delivery(
     tmp_path,
     monkeypatch,
@@ -215,9 +492,7 @@ def test_only_positive_round_budget_and_listed_issues_permit_delivery(
     assert (
         result.flow is not None and result.flow["review_outcome"] == "rounds_exhausted"
     )
-    meta = record.read_meta()
-    cfg = dict(meta.generation.config or {}, flow_review_rounds=0)
-    record.update_meta(generation=meta.generation.model_copy(update={"config": cfg}))
+    record.update_meta(flow_review_rounds=0)
     assert not finalize(record).ok
 
 

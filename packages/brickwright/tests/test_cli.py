@@ -8,13 +8,8 @@ import pytest
 from typer.testing import CliRunner
 
 from brickwright.cli import app
-from brickwright.config import Config, Effort
-from brickwright.driver import RunReport
-from brickwright.driver.critique import VIEWPOINT_COMPARE_PROMPT
-from brickwright.driver.viewpoint import VIEWPOINT_TASK
-from brickwright.prompts import system_prompt
+from brickwright.config import Config
 from brickwright.record import Meta, Record, ValidationFailures
-from brickwright.tools.validation import ValidationReport
 
 pytestmark = pytest.mark.integration
 
@@ -61,182 +56,11 @@ def _meta(rd: str, record_id: str) -> Meta:
     return _record(rd, record_id).read_meta()
 
 
-class TestGenerate:
-    """`generate` initializes a record from a prompt (or --from) and drives the
-    agent on it. The driver is mocked here -- this checks the CLI creates the
-    record, builds the right Config, and maps the result to an exit code."""
-
-    def test_initializes_a_record_then_runs_the_agent(self, rd, monkeypatch):
-        seen = {}
-
-        def fake(record, config):
-            seen["record_id"] = record.id
-            return RunReport(
-                done=True,
-                turns=2,
-                validations=1,
-                source_sha256=record.source_sha256,
-                report=ValidationReport(ok=True, source_sha256=record.source_sha256),
-            )
-
-        monkeypatch.setattr("brickwright.cli.run_agent", fake)
-        result = run("generate", "a tower", "--records-dir", rd)
-        assert result.exit_code == 0
-        # A real record was created before the agent ran.
-        record_id = seen["record_id"]
-        assert _record(rd, record_id).build_path.is_file()
-        # Driver-built records are not marked external.
-        assert _meta(rd, record_id).generation.external is False
-        assert _meta(rd, record_id).prompt == "a tower"
-
-    def test_uses_given_model_effort_turns_and_validations(self, rd, monkeypatch):
-        seen = {}
-
-        def fake(record, config):
-            seen.update(
-                model=config.model,
-                effort=config.effort.value,
-                turns=config.max_turns,
-                validations=config.max_validations,
-                build_timeout=config.build_timeout,
-                render_timeout=config.render_timeout,
-                cost=config.max_cost,
-            )
-            return RunReport(
-                done=True,
-                turns=1,
-                validations=1,
-                source_sha256=record.source_sha256,
-                report=ValidationReport(ok=True, source_sha256=record.source_sha256),
-            )
-
-        monkeypatch.setattr("brickwright.cli.run_agent", fake)
-        result = run(
-            "generate",
-            "a tower",
-            "--records-dir",
-            rd,
-            "--model",
-            "cli/model",
-            "--effort",
-            "high",
-            "--max-turns",
-            "7",
-            "--max-validations",
-            "5",
-            "--build-timeout",
-            "12.5",
-            "--render-timeout",
-            "45.0",
-            "--max-cost",
-            "0.5",
-        )
-        assert result.exit_code == 0
-        assert seen == {
-            "model": "cli/model",
-            "effort": "high",
-            "turns": 7,
-            "validations": 5,
-            "build_timeout": 12.5,
-            "render_timeout": 45.0,
-            "cost": 0.5,
-        }
-
-    def test_uses_given_subagent_options(self, rd, monkeypatch):
-        seen = {}
-
-        def fake(record, config):
-            seen.update(
-                enabled=config.subagents_enabled,
-                parallel=config.max_parallel_subagents,
-                turns=config.subagent_max_turns,
-                cost=config.subagent_max_cost,
-            )
-            return RunReport(
-                done=True,
-                turns=1,
-                validations=1,
-                source_sha256=record.source_sha256,
-                report=ValidationReport(ok=True, source_sha256=record.source_sha256),
-            )
-
-        monkeypatch.setattr("brickwright.cli.run_agent", fake)
-        result = run(
-            "generate",
-            "a tower",
-            "--records-dir",
-            rd,
-            "--use-subagents",
-            "--max-parallel-subagents",
-            "2",
-            "--subagent-max-turns",
-            "30",
-            "--subagent-max-cost",
-            "0.25",
-        )
-        assert result.exit_code == 0
-        assert seen == {"enabled": True, "parallel": 2, "turns": 30, "cost": 0.25}
-
-    def test_image_option_is_copied_into_the_record(
-        self, rd, tmp_path, monkeypatch, png_bytes
-    ):
-        img = tmp_path / "ref.png"
-        img.write_bytes(png_bytes)
-        seen = {}
-
-        def fake(record, config):
-            seen["id"] = record.id
-            return RunReport(
-                done=True,
-                turns=0,
-                validations=0,
-                source_sha256=record.source_sha256,
-                report=ValidationReport(ok=True, source_sha256=record.source_sha256),
-            )
-
-        monkeypatch.setattr("brickwright.cli.run_agent", fake)
-        result = run("generate", "a tower", "--records-dir", rd, "--image", str(img))
-        assert result.exit_code == 0
-        assert _meta(rd, seen["id"]).prompt_image == "prompt.png"
-        prompt_image_path = _record(rd, seen["id"]).prompt_image_path
-        assert prompt_image_path is not None
-        assert prompt_image_path.read_bytes() == png_bytes
-
-    def test_clones_with_from(self, rd, monkeypatch):
-        source = _init(rd)
-        seen = {}
-
-        def fake(record, config):
-            seen["id"] = record.id
-            return RunReport(
-                done=True,
-                turns=0,
-                validations=0,
-                source_sha256=record.source_sha256,
-                report=ValidationReport(ok=True, source_sha256=record.source_sha256),
-            )
-
-        monkeypatch.setattr("brickwright.cli.run_agent", fake)
-        result = run("generate", "--records-dir", rd, "--from", source)
-        assert result.exit_code == 0
-        assert seen["id"] != source
-        assert _record(rd, seen["id"]).build_path.is_file()
-
-    def test_nonzero_exit_when_unfinished_or_invalid(self, rd, monkeypatch):
-        monkeypatch.setattr(
-            "brickwright.cli.run_agent",
-            lambda record, config: RunReport(
-                done=True, turns=1, validations=1, report=ValidationReport(ok=False)
-            ),
-        )
-        result = run("generate", "a tower", "--records-dir", rd)
-        assert result.exit_code != 0
-
-    def test_generate_help_shows_the_effort_default(self):
-        # Config defaults are wired into the options, so --help displays them.
-        # (Strip Rich's line-wrapping so the multi-column help is searchable.)
-        out = run("generate", "--help").stdout.replace("\n", " ")
-        assert "high" in out  # Effort.HIGH, the default
+@pytest.mark.parametrize("command", ["generate", "gallery"])
+def test_builtin_agent_commands_removed(command):
+    result = run(command, "--help")
+    assert result.exit_code == 2
+    assert f"No such command '{command}'" in result.output
 
 
 class TestShow:
@@ -285,14 +109,6 @@ class TestLs:
         assert "[/]" in show_result.stdout
 
 
-class TestGallery:
-    def test_prints_the_gallery(self):
-        result = run("gallery")
-        assert result.exit_code == 0
-        assert "BrickWright" in result.stdout  # the lifecycle banner
-        assert "✓" in result.stdout and "✗" in result.stdout
-
-
 class TestInit:
     def test_prints_record_id_and_build_path(self, rd):
         # init prints labeled "record_id=" and "build_path=" lines, so an
@@ -325,7 +141,7 @@ class TestInit:
         assert ls_result.stdout.strip() == ""
 
     def test_rejects_missing_prompt_image_and_from(self, rd):
-        # init/generate need at least one of: a prompt, --image, or --from.
+        # init needs at least one of: a prompt, --image, or --from.
         result = ext("init", "--records-dir", rd)
         assert result.exit_code != 0
         assert "provide a prompt" in result.output
@@ -339,24 +155,6 @@ class TestInit:
         clone_id = _init_fields(result.stdout)["record_id"]
         assert result.exit_code == 0 and clone_id != source
         assert "brick(4, 2" in _record(rd, clone_id).read_build()
-
-    @pytest.mark.usefixtures("in_process")
-    def test_init_marks_the_record_as_external(self, rd):
-        record_id = _init(rd)
-        assert _meta(rd, record_id).generation.external is True
-
-
-class TestInstructions:
-    def test_prints_the_external_system_prompt(self):
-        result = ext("instructions")
-        assert result.exit_code == 0
-        assert system_prompt(external=True) in result.stdout
-
-    def test_agent_doc_lists_the_real_effort_values(self):
-        doc = (Path(__file__).parents[1] / "EXTERNAL_AGENT_INSTRUCTIONS.md").read_text()
-        match = re.search(r"--effort ([a-z|]+)", doc)
-        assert match is not None
-        assert set(match.group(1).split("|")) == {e.value for e in Effort}
 
 
 @pytest.mark.usefixtures("in_process")
@@ -508,13 +306,10 @@ class TestFinalize:
 
         timing = _meta(rd, record_id).timing
         assert timing is not None
-        assert timing.other == 0.0
         # Each external command is timed under its own name.
         assert set(timing.tools) == {"validate", "finalize"}
         tool_total = sum(timing.tools.values())
         assert timing.total >= tool_total >= 0.0
-        # External runs attribute the unmeasured remainder to llm.
-        assert timing.llm == pytest.approx(round(timing.total - tool_total, 3))
 
     def test_validate_then_finalize_record_per_command_time(
         self, rd, fake_render_pipeline, monkeypatch
@@ -641,8 +436,7 @@ class TestRenderAngle:
 
 
 class TestCritiqueInstructions:
-    """`critique-instructions` prints the record-specific critique playbook plus the two
-    subagent system prompts (reused from the driver path)."""
+    """Image critique instructions refer to the specific record and target."""
 
     def _image_record(self, rd, tmp_path, png_bytes):
         img = tmp_path / "ref.png"
@@ -651,23 +445,21 @@ class TestCritiqueInstructions:
         assert result.exit_code == 0
         return _init_fields(result.stdout)["record_id"]
 
-    def test_prints_the_playbook_and_both_subagent_prompts(
+    def test_prints_record_specific_image_review_instructions(
         self, rd, tmp_path, png_bytes
     ):
         record_id = self._image_record(rd, tmp_path, png_bytes)
         result = ext("critique-instructions", record_id, "--records-dir", rd)
         assert result.exit_code == 0
         out = result.stdout
-        # Both subagent system prompts are present, reused from the driver path.
-        assert VIEWPOINT_TASK in out
-        assert VIEWPOINT_COMPARE_PROMPT in out
-        # Record-specific wiring for the agent to dispatch its subagents.
         assert record_id in out
         reference = _record(rd, record_id).prompt_image_path
         assert reference is not None
         assert str(reference.absolute()) in out
         assert "render-angle" in out
-        assert "fresh subagent" in out
+        assert "self-review" in out
+        assert "independent" in out
+        assert "review-instructions" in out
 
     def test_respects_the_critique_rounds_option(self, rd, tmp_path, png_bytes):
         record_id = self._image_record(rd, tmp_path, png_bytes)
@@ -680,13 +472,13 @@ class TestCritiqueInstructions:
             rd,
         )
         assert result.exit_code == 0
-        assert "up to 4 time(s)" in result.stdout
+        assert "up to 4 rounds" in result.stdout
 
     def test_defaults_to_two_rounds(self, rd, tmp_path, png_bytes):
         record_id = self._image_record(rd, tmp_path, png_bytes)
         result = ext("critique-instructions", record_id, "--records-dir", rd)
         assert result.exit_code == 0
-        assert "up to 2 time(s)" in result.stdout
+        assert "up to 2 rounds" in result.stdout
 
     def test_is_read_only_and_not_counted_as_a_tool_call(self, rd, tmp_path, png_bytes):
         # Printing the playbook must not mutate the record (no snapshot, no tally),

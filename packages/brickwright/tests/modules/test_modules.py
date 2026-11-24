@@ -4,7 +4,9 @@ from hashlib import sha256
 import bricklayer as bl
 import pytest
 from bricklayer.io import from_ldraw, to_ldraw
+from typer.testing import CliRunner
 
+from brickwright.cli import app
 from brickwright.config import Config
 from brickwright.modules import (
     ModuleError,
@@ -90,7 +92,7 @@ def assembly(tmp_path):
     parent = Record.create(config)
     plan = _plate_plan()
     _save_plan(parent, plan)
-    return config, parent, plan
+    return parent, plan
 
 
 def _plate():
@@ -141,10 +143,10 @@ def test_rejects_body_overlap_and_interface_outside_shared_face():
 
 
 def test_rotated_local_module_and_stack_stud_intrusion(assembly):
-    config, parent, plan = assembly
+    parent, plan = assembly
     plan["modules"][0]["rotation"] = [[0, 0, 1], [0, 1, 0], [-1, 0, 0]]
     _save_plan(parent, plan)
-    child = init_module(parent, "lower", config)
+    child = init_module(parent, "lower")
     from brickwright.tools.build_execution import load_build_module
 
     assert "local" in module_instructions(child)
@@ -155,15 +157,15 @@ def test_rotated_local_module_and_stack_stud_intrusion(assembly):
     plan["interfaces"][0]["joints"][0]["intrusion"]["max_depth"] = 2
     _save_plan(parent, plan)
     assert check_module(_plate(), child.path)[1][0].code == "module.contract_stale"
-    child = init_module(parent, "lower", config)
+    child = init_module(parent, "lower")
     diagnostics = check_module(_plate(), child.path)[1]
     assert [d.code for d in diagnostics] == ["module.outside_occupancy"]
     assert diagnostics[0].evidence["direction"] == [0, -1, 0]
 
 
 def test_wrong_endpoint_and_unrelated_geometry(assembly):
-    config, parent, plan = assembly
-    child = init_module(parent, "lower", config)
+    parent, plan = assembly
+    child = init_module(parent, "lower")
     moved = bl.LegoBuild()
     moved.add_raw(
         bl.plate(1, 1, bl.Color.RED),
@@ -175,7 +177,7 @@ def test_wrong_endpoint_and_unrelated_geometry(assembly):
     }
     plan["interfaces"][0]["joints"][0]["a"]["part_id"] = "3005"
     _save_plan(parent, plan)
-    child = init_module(parent, "lower", config)
+    child = init_module(parent, "lower")
     assert "module.outside_occupancy" in {
         d.code for d in check_module(_plate(), child.path)[1]
     }
@@ -184,11 +186,11 @@ def test_wrong_endpoint_and_unrelated_geometry(assembly):
 def test_merge_stays_replayable_after_source_change_and_stales_only_interface_ends(
     assembly,
 ):
-    config, parent, plan = assembly
+    parent, plan = assembly
     del plan["modules"][2]
     _save_plan(parent, plan)
-    lower = init_module(parent, "lower", config)
-    upper = init_module(parent, "upper", config)
+    lower = init_module(parent, "lower")
+    upper = init_module(parent, "upper")
     _seal(lower, _plate())
     _seal(upper, _plate())
     frozen = prepare_merge(parent)
@@ -212,22 +214,22 @@ def test_merge_stays_replayable_after_source_change_and_stales_only_interface_en
 
     plan["modules"].append(_plate_plan()["modules"][2])
     _save_plan(parent, plan)
-    side = init_module(parent, "side", config)
+    side = init_module(parent, "side")
     original = (side.path / "module-contract.json").read_bytes()
     plan["interfaces"][0]["joints"][0]["intrusion"]["max_depth"] = 3
     _save_plan(parent, plan)
     statuses = module_status(parent)["modules"]
     assert [item["contract_stale"] for item in statuses] == [True, True, False]
-    init_module(parent, "side", config)
+    init_module(parent, "side")
     assert (side.path / "module-contract.json").read_bytes() == original
 
 
 def test_merge_rejects_snapshot_tampering(assembly):
-    config, parent, plan = assembly
+    parent, plan = assembly
     del plan["modules"][2]
     _save_plan(parent, plan)
-    lower = init_module(parent, "lower", config)
-    upper = init_module(parent, "upper", config)
+    lower = init_module(parent, "lower")
+    upper = init_module(parent, "upper")
     snapshot = _seal(lower, _plate())
     _seal(upper, _plate())
     frozen = prepare_merge(parent)
@@ -245,32 +247,42 @@ def _combine(frozen):
     return to_ldraw(build)
 
 
-def test_module_dispatch_hands_back_child_snapshot(assembly, monkeypatch):
-    from brickwright.driver import loop
-    from brickwright.driver.report import RunReport
-    from brickwright.tools.registry import available_tools
-    from brickwright.tools.subagents import SubagentTask, dispatch_subagents
+def test_external_module_session_hands_back_child_snapshot(
+    assembly, in_process, monkeypatch
+):
+    monkeypatch.setattr("brickwright.tools.rendering.render_available", lambda: False)
+    parent, _ = assembly
+    config = Config(records_dir=parent.path.parent)
+    runner = CliRunner()
+    records = ["--records-dir", str(config.records_dir)]
 
-    config, parent, _ = assembly
-    seen = []
+    def invoke(*args):
+        result = runner.invoke(app, ["external", *args, *records])
+        assert result.exit_code == 0, result.output
+        return result.stdout
 
-    def run(child, cfg, *, narrator):
-        assert child.path == parent.path / "modules" / "lower"
-        assert "local" in child.read_meta().prompt
-        assert not cfg.can_dispatch_subagents
-        assert "finalize" in {item["function"]["name"] for item in available_tools(cfg)}
-        seen.append(_seal(child, _plate()).name)
-        return RunReport(done=True, turns=1, validations=1)
-
-    monkeypatch.setattr(loop, "run_agent", run)
-    output = dispatch_subagents(
-        parent, [SubagentTask(prompt="Build lower deck", module="lower")], config
+    child_ref = parent.id + "/modules/lower"
+    assert f"record_id={child_ref}" in invoke("module", "init", parent.id, "lower")
+    assert "local" in invoke(
+        "module", "instructions", child_ref, "--session-id", "worker"
     )
-    result = output[0]
-    assert result.ok and result.valid and result.finalized
-    assert result.record_id == parent.id + "/modules/lower"
-    assert result.snapshot_id == seen[0]
-    assert result.session_id
+    child = Record.load(config, child_ref)
+    child.write_build(
+        "from bricklayer import LegoBuild, Color, plate\n"
+        "def create_build():\n"
+        "    build = LegoBuild()\n"
+        "    build.add_raw(plate(1, 1, Color.RED))\n"
+        "    return build\n"
+        "def run_tests():\n"
+        "    return []\n"
+    )
+    invoke("validate", child_ref)
+    invoke("finalize", child_ref)
+    result = json.loads(invoke("module", "finish", child_ref, "--session-id", "worker"))
+    assert result["self_check_passed"]
+    assert result["record_id"] == child_ref
+    assert result["session_id"] == "worker"
+    assert result["snapshot_id"] == child.snapshots[-1].name
     assert module_status(parent)["modules"][0]["sessions"][0]["self_check_passed"]
 
 
@@ -321,8 +333,8 @@ def test_pin_joint_mates_in_declared_space_and_reports_real_collision(tmp_path):
         ],
     }
     _save_plan(parent, plan)
-    pin = init_module(parent, "pin-side", config)
-    hole = init_module(parent, "hole-side", config)
+    pin = init_module(parent, "pin-side")
+    hole = init_module(parent, "hole-side")
     source = bl.LegoBuild()
     source.add_raw(
         bl.Element("2780", bl.Color.RED),
@@ -366,7 +378,7 @@ def test_sealed_module_motion_survives_and_interference_blocks_both_checks(tmp_p
         ]
     }
     _save_plan(parent, plan)
-    child = init_module(parent, "machine", config)
+    child = init_module(parent, "machine")
     model = bl.LegoBuild()
     base = model.add_raw(bl.Element("3680", bl.Color.WHITE))
     top = model.connect(
@@ -405,12 +417,12 @@ def test_sealed_module_motion_survives_and_interference_blocks_both_checks(tmp_p
 
 
 def test_legacy_seal_can_replay_mpd_but_requires_new_motion_attestation(assembly):
-    config, parent, plan = assembly
+    parent, plan = assembly
     plan["modules"] = [plan["modules"][0]]
     plan["interfaces"] = []
     plan["modules"][0]["occupancy"]["min"][1] = -16
     _save_plan(parent, plan)
-    child = init_module(parent, "lower", config)
+    child = init_module(parent, "lower")
     snapshot = _seal(child, _plate())
     report = json.loads(snapshot.report_path.read_bytes())
     del report["module_motion"]
