@@ -26,10 +26,6 @@ uv run brickwright skill install --target .claude/skills/brickwright
 
 代理会创建搭建记录，在其中编辑 `build.py`，运行 `validate` 和 `finalize`。每条命令输出一个 JSON，代理按其中的 `next` 推进或修复。默认成品在 `records/<record_id>/out/build.ldr`。需要渲染预览时，将 `LDRAW_LIBRARY_PATH` 指向本地 LDraw 零件库目录。
 
-## 运行带参考图的 demo
-
-OMR36 的单题演示要求搭建蓝色动力喷气机。搭建者使用原题创建流程记录，在指定机位将当前模型与目标图对照，可以自行评审。demo 只接收 `finalize` 成功的版本，接收端逐字节核对提交的 MPD、定稿导出和已验证快照。准备 Harbor 任务所需的原题、命令和输出目录见[单题演示](demo/omr36/README.md)。
-
 ## 按任务查文档
 
 | 想做什么 | 入口 |

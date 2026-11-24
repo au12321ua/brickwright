@@ -36,6 +36,6 @@ uv run brickwright knowledge show hinged-panels
 uv run brickwright external verify-delivery ID model.mpd
 ```
 
-仅当提交的 MPD、当前成功定稿的导出和已验证快照的字节一致时通过，结果包含快照 ID、SHA-256 和评审方式。单题 demo 的交付位置和接收端见 [OMR36 演示](../../demo/omr36/README.md)。
+仅当提交的 MPD、当前成功定稿的导出和已验证快照的字节一致时通过，结果包含快照 ID、SHA-256 和评审方式。
 
 *LEGO® is a trademark of the LEGO Group, which does not sponsor, authorize, or endorse this project.*

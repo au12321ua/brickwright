@@ -13,7 +13,7 @@ Release branch: main
 | --- | --- |
 | 零件、连接、试装或 SDK 参考 | [BrickLayer SDK](packages/bricklayer/README.md) · [架构](docs/architecture/overview.md) |
 | 宿主指引、知识条目或按主题生成的页面 | [skill 和知识库的来源](docs/architecture/overview.md#skill-的内容从哪里来) |
-| 记录、结构验证、评审、定稿或 demo 接收端 | [验证与导出](docs/design/validation-and-export.md) · [单题演示](demo/omr36/README.md) |
+| 记录、结构验证、评审、定稿或交付校验 | [验证与导出](docs/design/validation-and-export.md) |
 | 跨模块方案、进行中的提案及历史结果 | [提案索引](docs/proposals/README.md) |
 
 宿主负责模型调用。BrickWright 维护 skill、workflow 库和 CLI，BrickLayer 维护建模 SDK。知识按任务检索，API 按动作拆页，允许按批扩充。单题 demo 允许调整数据集和接口；若旧接口兼容性妨碍演示，以演示为先。主代理可自评。只接收成功定稿的版本，并核对提交 MPD 与已验证快照逐字节一致。真实宿主代理实测留到开发完成后。[U-11](docs/decisions.md#u-11--在-fork-内精简为-skill-与-sdk) · [U-12](docs/decisions.md#u-12--演示从简并允许调整数据集与接口) · [U-13](docs/decisions.md#u-13--只交付定稿快照并在开发后实测)
