@@ -417,8 +417,19 @@ class Record:
         """Load an existing record by id."""
         path = config.records_dir / record_id
         if not (path / META_NAME).is_file():
-            raise FileNotFoundError(f"no record {record_id!r} in {config.records_dir}")
+            raise RecordNotFound(record_id, config.records_dir)
         return cls(path)
+
+
+class RecordNotFound(FileNotFoundError):
+    """No record with this ID exists in the records directory."""
+
+    code = "record.not_found"
+
+    def __init__(self, record_id: str, records_dir: Path) -> None:
+        super().__init__(f"no record {record_id!r} in {records_dir}")
+        self.record_id = record_id
+        self.records_dir = records_dir
 
 
 def get_template() -> str:

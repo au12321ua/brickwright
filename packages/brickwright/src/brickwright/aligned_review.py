@@ -15,7 +15,7 @@ from typing import Any, Literal
 from uuid import UUID, uuid4
 
 from PIL import Image, ImageOps
-from pydantic import BaseModel, TypeAdapter
+from pydantic import BaseModel, TypeAdapter, ValidationError
 
 from ._aligned_compare import compare_images, read_rgba
 from ._aligned_render import Cameras, MatchedAngle, render_matched_model, render_model
@@ -24,7 +24,18 @@ from ._review_reports import (
     MATCHED_GUIDANCE,
     REVIEW_GUIDANCE,
     FailedReport,
+    Finding,
     Report,
+)
+from .actions import (
+    FILE,
+    RECORD,
+    FlowError,
+    edit,
+    provide,
+    run,
+    validation_errors,
+    validation_message,
 )
 from .config import Config
 from .record import Record
@@ -49,7 +60,11 @@ class _Asset(BaseModel):
     def read(self, record: Record) -> bytes:
         data = (record.path / self.path).read_bytes()
         if _hash(data) != self.sha256:
-            raise ValueError(f"review input changed: {self.path}")
+            raise FlowError(
+                f"A review input changed after it was recorded: {self.path}.",
+                code="flow.changed",
+                evidence={"path": self.path},
+            )
         return data
 
 
@@ -106,6 +121,100 @@ def _replace(path: Path, data: bytes) -> None:
         stage.unlink(missing_ok=True)
 
 
+CAMERAS = "CAMERAS_JSON"
+REFERENCES = "REFERENCE_DIR"
+
+
+def render_action(cameras: Path | None = None):
+    """Render the checked snapshot at the task cameras."""
+    if cameras is not None and cameras.is_file():
+        return run(
+            "Render the checked snapshot at the task cameras.",
+            "external",
+            "render",
+            RECORD,
+            "--cameras",
+            str(cameras.absolute()),
+        )
+    return provide(
+        "Provide the task's camera file and render the checked snapshot at those cameras.",
+        run(
+            "Render the checked snapshot at the task cameras.",
+            "external",
+            "render",
+            RECORD,
+            "--cameras",
+            CAMERAS,
+        ),
+        placeholders=(CAMERAS,),
+    )
+
+
+def compare_action(views: list[str], reference_dir: Path | None = None):
+    """Compare the rendered views with goal-<camera>.png targets."""
+    names = ", ".join(f"goal-{view}.png" for view in views)
+    if reference_dir is not None and all(
+        (reference_dir / f"goal-{view}.png").is_file() for view in views
+    ):
+        return run(
+            f"Compare the rendered views with {names}.",
+            "external",
+            "compare",
+            RECORD,
+            "--reference-dir",
+            str(reference_dir.absolute()),
+        )
+    return provide(
+        f"Provide a directory containing {names}, one target per camera, and compare.",
+        run(
+            f"Compare the rendered views with {names}.",
+            "external",
+            "compare",
+            RECORD,
+            "--reference-dir",
+            REFERENCES,
+        ),
+        placeholders=(REFERENCES,),
+        path=None if reference_dir is None else reference_dir.absolute(),
+    )
+
+
+def _new_round_action():
+    return run(
+        "Prepare a new review round for the current snapshot.",
+        "external",
+        "review-instructions",
+        RECORD,
+    )
+
+
+def _report_fix(message: str, *, fields: tuple[str, ...], **evidence) -> FlowError:
+    return FlowError(
+        message,
+        code="review.report_invalid",
+        evidence=evidence,
+        action=edit(
+            "Correct the named fields in the same report and submit it to the same round.",
+            FILE,
+            run(
+                "Submit the corrected report.",
+                "external",
+                "review",
+                RECORD,
+                "--set",
+                FILE,
+            ),
+            fields=fields,
+        ),
+        extra={"round_open": True},
+    )
+
+
+def _cameras_path(record: Record, render: _Render) -> Path | None:
+    path = record.path / render.cameras.path
+    return path if render.alignment == "fixed_cameras" and path.is_file() else None
+
+
 def _render_path(record: Record) -> Path:
     return record.out_dir / "aligned-render.json"
 
@@ -131,8 +240,24 @@ def _render_worker(
 
 def render_cameras(record: Record, cameras: Path, config: Config | None = None) -> dict:
     """Render fixed views from the current checked MPD or an unvalidated preview."""
+    if not cameras.is_file():
+        raise FlowError(
+            f"The camera file {cameras} does not exist.",
+            code="flow.invalid_input",
+            evidence={"path": str(cameras)},
+            action=render_action(),
+        )
     camera_file = _Asset.capture(record, cameras)
-    spec = Cameras.model_validate_json(camera_file.read(record))
+    try:
+        spec = Cameras.model_validate_json(camera_file.read(record))
+    except ValidationError as exc:
+        errors = validation_errors(exc)
+        raise FlowError(
+            validation_message(f"The camera file {cameras}", errors),
+            code="flow.invalid_input",
+            evidence={"path": str(cameras), "errors": errors},
+            action=render_action(),
+        ) from None
     source = record.read_build()
     source_digest = _hash(source.encode("utf-8"))
     state = _structural_state(record)
@@ -146,14 +271,21 @@ def render_cameras(record: Record, cameras: Path, config: Config | None = None) 
         model = root / "model.ldr"
         if checked:
             model.write_bytes(Path(state["mpd_path"]).read_bytes())
-        paths, model_digest = run_in_subprocess(
-            _render_worker,
-            (record, None if checked else source, model, spec, root / "views"),
-            (config or Config()).render_timeout,
-        )
+        try:
+            paths, model_digest = run_in_subprocess(
+                _render_worker,
+                (record, None if checked else source, model, spec, root / "views"),
+                (config or Config()).render_timeout,
+            )
+        except Exception as exc:
+            raise _render_failure(exc, cameras) from exc
         camera_file.read(record)
         if record.source_sha256 != source_digest:
-            raise ValueError("build changed during fixed-camera rendering")
+            raise FlowError(
+                "build.py changed during fixed-camera rendering.",
+                code="flow.changed",
+                action=render_action(cameras),
+            )
         views = {}
         for name, path in paths.items():
             destination = record.out_dir / "views" / f"{name}.png"
@@ -161,7 +293,11 @@ def render_cameras(record: Record, cameras: Path, config: Config | None = None) 
             _replace(destination, data)
             asset = _Asset.capture(record, destination)
             if asset.sha256 != _hash(data):
-                raise ValueError(f"view {name} changed during rendering")
+                raise FlowError(
+                    f"View {name} changed during rendering.",
+                    code="flow.changed",
+                    action=render_action(cameras),
+                )
             views[name] = asset
         render = _Render(
             snapshot_id=state["snapshot_id"] if checked else None,
@@ -175,14 +311,51 @@ def render_cameras(record: Record, cameras: Path, config: Config | None = None) 
     return render.model_dump(mode="json")
 
 
+def _render_failure(exc: Exception, cameras: Path) -> Exception:
+    """Name a missing LDraw library; leave every other failure unchanged."""
+    kind = getattr(exc, "exception_type", type(exc).__name__)
+    if kind != "LDrawLibraryNotFound":
+        return exc
+    return FlowError(
+        "Rendering needs the LDraw parts library, which was not found.",
+        code="render.ldraw_missing",
+        evidence={"cause": str(exc)},
+        action=provide(
+            "Set LDRAW_LIBRARY_PATH to the root of the LDraw parts library, then render again.",
+            run(
+                "Render the checked snapshot at the task cameras.",
+                "external",
+                "render",
+                RECORD,
+                "--cameras",
+                str(cameras.absolute()),
+            ),
+        ),
+    )
+
+
 def compare_record(record: Record, reference_dir: Path) -> dict:
     """Save per-view verifier metrics, two-dimensional regions, and overlays."""
+    if not _render_path(record).is_file():
+        raise FlowError(
+            "Render the fixed camera views before comparing them.",
+            code="review.render_missing",
+            action=render_action(),
+        )
     render_asset = _Asset.capture(record, _render_path(record))
     render = _Render.model_validate_json(render_asset.read(record))
-    if render.source_sha256 != record.source_sha256:
-        raise ValueError("build changed. Render the current version before comparing")
     if render.alignment != "fixed_cameras":
-        raise ValueError("pixel comparison requires fixed-camera renders")
+        raise FlowError(
+            "Pixel comparison needs fixed-camera renders; the current render is a matched viewpoint.",
+            code="review.render_missing",
+            action=render_action(),
+        )
+    if render.source_sha256 != record.source_sha256:
+        raise FlowError(
+            "build.py changed after rendering. Render the current version before comparing.",
+            code="review.render_stale",
+            action=render_action(_cameras_path(record, render)),
+        )
     render.cameras.read(record)
     missing = [
         f"goal-{name}.png"
@@ -190,10 +363,13 @@ def compare_record(record: Record, reference_dir: Path) -> dict:
         if not (reference_dir / f"goal-{name}.png").is_file()
     ]
     if missing:
-        raise ValueError(
+        raise FlowError(
             f"Missing reference images in {reference_dir}: {', '.join(missing)}. "
             "Name each target image goal-<camera>.png for the cameras "
-            f"{', '.join(render.views)}."
+            f"{', '.join(render.views)}.",
+            code="review.references_missing",
+            evidence={"directory": str(reference_dir), "missing": missing},
+            action=compare_action(list(render.views)),
         )
     references, overlays, metrics = {}, {}, {}
     with TemporaryDirectory() as scratch:
@@ -215,7 +391,11 @@ def compare_record(record: Record, reference_dir: Path) -> dict:
             _replace(output, data)
             overlays[name] = _Asset.capture(record, output)
             if overlays[name].sha256 != _hash(data):
-                raise ValueError(f"overlay for {name} changed during comparison")
+                raise FlowError(
+                    f"The overlay for {name} changed during comparison.",
+                    code="flow.changed",
+                    action=compare_action(list(render.views), reference_dir),
+                )
     render_asset.read(record)
     comparison = _Comparison(
         render=render_asset, references=references, overlays=overlays, metrics=metrics
@@ -230,7 +410,11 @@ def _round_path(record: Record, round_id: str) -> Path:
         if UUID(round_id).hex != round_id:
             raise ValueError
     except ValueError:
-        raise ValueError("invalid review round ID") from None
+        raise _report_fix(
+            "round_id is not a review round ID.",
+            fields=("round_id",),
+            round_id=round_id,
+        ) from None
     return record.path / "reviews" / round_id
 
 
@@ -245,13 +429,15 @@ def _require_structure(record: Record) -> dict:
         and state.get("snapshot_id")
         and state.get("mpd_path")
     ):
-        raise ValueError(
-            "review requires a current structural snapshot that passed validation"
+        raise FlowError(
+            "Review needs a current structural snapshot that passed validation.",
+            code="flow.structure",
         )
     descriptions = state["artifacts"]
     if not all(descriptions[name]["valid"] for name in ("conditions", "features")):
-        raise ValueError(
-            "review requires valid original conditions and a valid feature checklist"
+        raise FlowError(
+            "Review needs valid original conditions and a valid feature checklist.",
+            code="flow.features",
         )
     return state
 
@@ -266,7 +452,10 @@ def _prepare_matched_view(
     state = _require_structure(record)
     image_name = _prompt_image_name(record)
     if not image_name:
-        raise ValueError("matched viewpoint review requires a prompt image")
+        raise FlowError(
+            "A matched-viewpoint review needs a prompt image on the record.",
+            code="flow.invalid_input",
+        )
     prompt_image = _Asset.capture(record, record.path / image_name)
     with Image.open(BytesIO(prompt_image.read(record))) as image:
         reference_size = ImageOps.exif_transpose(image).size
@@ -286,7 +475,10 @@ def _prepare_matched_view(
         with Image.open(rendered) as image:
             candidate_size = image.size
         if source_digest != record.source_sha256:
-            raise ValueError("build changed during matched-viewpoint rendering")
+            raise FlowError(
+                "build.py changed during matched-viewpoint rendering.",
+                code="flow.changed",
+            )
         camera_file = record.out_dir / "matched-camera.json"
         candidate = record.out_dir / "views/matched.png"
         camera_spec = camera.model_dump(mode="json") | {"method": "matched_viewpoint"}
@@ -295,7 +487,9 @@ def _prepare_matched_view(
         _replace(candidate, color_data)
     view = _Asset.capture(record, candidate)
     if view.sha256 != _hash(color_data):
-        raise ValueError("matched view changed during rendering")
+        raise FlowError(
+            "The matched view changed during rendering.", code="flow.changed"
+        )
     render = _Render(
         snapshot_id=state["snapshot_id"],
         source_sha256=source_digest,
@@ -360,8 +554,11 @@ def _prepare_round(record: Record, parent_session_id: str | None) -> Path:
         or render.source_sha256 != record.source_sha256
         or render.model_sha256 != model_asset.sha256
     ):
-        raise ValueError(
-            "render and compare the current structural snapshot before review"
+        raise FlowError(
+            "The render is older than the current structural snapshot. "
+            "Render and compare the current snapshot before review.",
+            code="review.render_stale",
+            action=render_action(_cameras_path(record, render)),
         )
 
     assets = {
@@ -375,7 +572,11 @@ def _prepare_round(record: Record, parent_session_id: str | None) -> Path:
     }
     for name in ("conditions", "features"):
         if assets[f"{name}.json"].sha256 != descriptions[name]["sha256"]:
-            raise ValueError(f"{name} changed while preparing the review")
+            raise FlowError(
+                f"{name}.json changed while preparing the review.",
+                code="flow.changed",
+                action=_new_round_action(),
+            )
     pointer = record.path / "flow/current.json"
     if pointer.is_file():
         pointer_asset = _Asset.capture(record, pointer)
@@ -384,7 +585,11 @@ def _prepare_round(record: Record, parent_session_id: str | None) -> Path:
             or json.loads(pointer_asset.read(record))["structure_sha256"]
             != assets["_structure.json"].sha256
         ):
-            raise ValueError("structural snapshot changed while preparing the review")
+            raise FlowError(
+                "The structural snapshot changed while preparing the review.",
+                code="flow.changed",
+                action=_new_round_action(),
+            )
         assets["_current.json"] = pointer_asset
         validation = _validation_asset(
             record, snapshot_id, render.source_sha256, pointer_asset
@@ -418,8 +623,9 @@ def _prepare_round(record: Record, parent_session_id: str | None) -> Path:
             or _Asset.capture(record, record.path / prompt_image)
             != comparison.references["matched"]
         ):
-            raise ValueError(
-                "prompt image changed; match the current reference viewpoint"
+            raise FlowError(
+                "The prompt image changed. Match the current reference viewpoint again.",
+                code="review.render_stale",
             )
     public_files = {
         key: value for key, value in assets.items() if not key.startswith("_")
@@ -489,7 +695,11 @@ def _prepare_round(record: Record, parent_session_id: str | None) -> Path:
         (staging / "bindings.json").chmod(0o444)
         staging.rename(destination)
     if not review_inputs_current(record, round_id):
-        raise ValueError("review evidence changed while preparing the frozen round")
+        raise FlowError(
+            "Review evidence changed while preparing the frozen round.",
+            code="flow.changed",
+            action=_new_round_action(),
+        )
     return destination
 
 
@@ -500,37 +710,108 @@ def review_instructions(
     matched_angle: tuple[float, float] | None = None,
     config: Config | None = None,
 ) -> str:
-    """Freeze the current packet and describe how to submit a review."""
+    """Freeze the current packet and return the reviewer instructions."""
+    prepared = prepare_review(
+        record,
+        parent_session_id=parent_session_id,
+        matched_angle=matched_angle,
+        config=config,
+    )
+    return prepared["instructions"]
+
+
+def prepare_review(
+    record: Record,
+    *,
+    parent_session_id: str | None = None,
+    matched_angle: tuple[float, float] | None = None,
+    config: Config | None = None,
+) -> dict[str, Any]:
+    """Freeze a review round, write its report template and instructions."""
     if matched_angle is not None:
         _prepare_matched_view(record, matched_angle, config)
     if not _comparison_path(record).is_file():
-        if message := _compare_first(record):
-            raise ValueError(message)
+        if error := _compare_first(record):
+            raise error
         return _match_viewpoint_instructions(record)
     round_path = _prepare_round(record, parent_session_id)
-    manifest = round_path / "inputs/manifest.json"
-    manifest_bytes = manifest.read_bytes()
-    guidance = _review_guidance(json.loads(manifest_bytes))
-    records_dir = quote(str(record.path.parent.resolve()))
-    record_id = quote(record.id)
-    return (
-        "Open the frozen images yourself (dispatch=self, both session IDs are the builder ID), "
-        "or dispatch a fresh, independent reviewer with no builder history "
-        "(dispatch=subagent, use the actual child and parent IDs). "
-        f"Review the frozen packet in {manifest.parent.resolve()}. "
-        f"The round ID is {round_path.name}; input_sha256 is {_hash(manifest_bytes)}. "
-        "Submit the review JSON with "
-        f"`brickwright external review {record_id} --set REPORT.json --records-dir {records_dir}`. "
-        "If dispatch fails or the reviewer cannot read the images, submit schema_version, "
-        "round_id, input_sha256, and failure_reason to archive the failed attempt.\n\n"
-        f"{guidance}\n"
+    packet = round_path / "inputs"
+    manifest_bytes = (packet / "manifest.json").read_bytes()
+    manifest = json.loads(manifest_bytes)
+    digest = _hash(manifest_bytes)
+    report_path = round_path / "report.json"
+    report_path.write_bytes(_json(_report_template(packet, manifest, digest)))
+    instructions = (
+        f"Review the frozen packet in {packet.resolve()}. Open the frozen images "
+        "yourself for a self-review (dispatch=self, keep both prefilled session IDs), "
+        "or give this file and the packet to a fresh, independent reviewer with no "
+        "builder history (dispatch=subagent, set reviewer.session_id to the reviewer's "
+        f"own session ID). Fill in {report_path.resolve()}: it already holds the round "
+        f"ID {round_path.name}, the input digest {digest}, and every condition and "
+        "feature to judge. If the images cannot be read, replace the report with "
+        "schema_version, round_id, input_sha256 and failure_reason to archive the "
+        "failed attempt. The builder submits the report.\n\n"
+        f"{_review_guidance(manifest)}\n"
         "Copy all image_reads names from the manifest only after opening those files. "
-        "Return this JSON schema with the round ID and digest above.\n"
+        "The report follows this JSON schema.\n"
         f"{json.dumps(Report.model_json_schema(), indent=2)}"
     )
+    instructions_path = round_path / "instructions.md"
+    instructions_path.write_text(instructions + "\n", encoding="utf-8")
+    return {
+        "mode": "review",
+        "round_id": round_path.name,
+        "input_sha256": digest,
+        "packet_dir": str(packet.resolve()),
+        "report_path": str(report_path.resolve()),
+        "instructions_path": str(instructions_path.resolve()),
+        "instructions": instructions,
+        "next": edit(
+            "Open instructions.md and the packet images, judge every condition and "
+            "feature, and fill in the report template.",
+            report_path.resolve(),
+            run(
+                "Submit the report.",
+                "external",
+                "review",
+                RECORD,
+                "--set",
+                str(report_path.resolve()),
+            ),
+            fields=("conditions", "features", "findings", "verdict", "reviewer"),
+        ),
+    }
 
 
-def _compare_first(record: Record) -> str | None:
+def _report_template(packet: Path, manifest: dict, digest: str) -> dict[str, Any]:
+    conditions = json.loads((packet / "conditions.json").read_bytes())["checks"]
+    features = json.loads((packet / "features.json").read_bytes())["features"]
+    session = manifest["parent_session_id"] or "builder"
+    return {
+        "schema_version": 1,
+        "round_id": manifest["round_id"],
+        "input_sha256": digest,
+        "reviewer": {
+            "session_id": session,
+            "parent_session_id": session,
+            "model": "",
+            "effort": "",
+            "dispatch": "self",
+            "image_reads": [],
+        },
+        "conditions": [
+            {"id": item["id"], "status": "", "explanation": "", "evidence": []}
+            for item in conditions
+        ],
+        "features": [
+            {"id": item["id"], "status": "", "evidence": []} for item in features
+        ],
+        "findings": [],
+        "verdict": "",
+    }
+
+
+def _compare_first(record: Record) -> FlowError | None:
     """Explain the missing comparison after a fixed-camera render."""
     try:
         data = _render_path(record).read_bytes()
@@ -540,12 +821,10 @@ def _compare_first(record: Record) -> str | None:
     if render.alignment != "fixed_cameras":
         return None
     names = ", ".join(f"goal-{name}.png" for name in render.views)
-    records_dir = quote(str(record.path.parent.resolve()))
-    return (
-        "Fixed-camera views are rendered but not compared with the targets. Run "
-        f"`brickwright external compare {quote(record.id)} --reference-dir DIR "
-        f"--records-dir {records_dir}`, where DIR contains {names}, then request "
-        "the review instructions again."
+    return FlowError(
+        f"Fixed-camera views are rendered but not compared with the targets ({names}).",
+        code="review.comparison_missing",
+        action=compare_action(list(render.views)),
     )
 
 
@@ -554,19 +833,22 @@ def _review_guidance(manifest: dict) -> str:
     return (MATCHED_GUIDANCE if matched else FIXED_GUIDANCE) + "\n\n" + REVIEW_GUIDANCE
 
 
-def _match_viewpoint_instructions(record: Record) -> str:
+def _match_viewpoint_instructions(record: Record) -> dict[str, Any]:
     from .external_critique import external_viewpoint_prompt
 
     _require_structure(record)
     image_name = _prompt_image_name(record)
     if not image_name:
-        raise ValueError(
-            "render and compare fixed camera views, or attach a prompt image"
+        raise FlowError(
+            "Review needs fixed-camera renders compared with targets, or a prompt image "
+            "for a matched viewpoint.",
+            code="review.render_missing",
+            action=render_action(),
         )
     match = external_viewpoint_prompt(record)
     records_dir = quote(str(record.path.parent.resolve()))
     record_id = quote(record.id)
-    return (
+    instructions = (
         "Match the viewpoint yourself or give these instructions to a viewpoint-matching agent. "
         "The selected angles will be used to render the checked snapshot for visual review.\n"
         f"Reference: {(record.path / image_name).resolve()}\n"
@@ -576,6 +858,25 @@ def _match_viewpoint_instructions(record: Record) -> str:
         f"brickwright external review-instructions {record_id} --azimuth <A> --elevation <E> "
         f"--records-dir {records_dir}"
     )
+    return {
+        "mode": "match_viewpoint",
+        "instructions": instructions,
+        "next": provide(
+            "Match the reference viewpoint with render-angle as the instructions describe, "
+            "then prepare the review at the matched angles.",
+            run(
+                "Prepare the review at the matched angles.",
+                "external",
+                "review-instructions",
+                RECORD,
+                "--azimuth",
+                "AZIMUTH",
+                "--elevation",
+                "ELEVATION",
+            ),
+            placeholders=("AZIMUTH", "ELEVATION"),
+        ),
+    }
 
 
 def _read_manifest(round_path: Path) -> tuple[_PrivateInputs, dict]:
@@ -584,7 +885,7 @@ def _read_manifest(round_path: Path) -> tuple[_PrivateInputs, dict]:
     )
     manifest = (round_path / "inputs/manifest.json").read_bytes()
     if _hash(manifest) != private.manifest_sha256:
-        raise ValueError("frozen review manifest changed")
+        raise _packet_changed("The frozen review manifest changed.")
     parsed = json.loads(manifest)
     validation = private.assets.get("_validation.json")
     if (
@@ -596,17 +897,25 @@ def _read_manifest(round_path: Path) -> tuple[_PrivateInputs, dict]:
         or parsed.get("validation_sha256")
         != (validation.sha256 if validation else None)
     ):
-        raise ValueError("frozen review manifest bindings changed")
+        raise _packet_changed("The frozen review manifest bindings changed.")
     for name, digest in parsed["files"].items():
         if _hash((round_path / "inputs" / name).read_bytes()) != digest:
-            raise ValueError(f"frozen review input changed: {name}")
+            raise _packet_changed(f"The frozen review input {name} changed.")
     for name, asset in private.assets.items():
         if (
             name.startswith("_")
             and _hash((round_path / name).read_bytes()) != asset.sha256
         ):
-            raise ValueError(f"frozen structural input changed: {name}")
+            raise _packet_changed(f"The frozen structural input {name} changed.")
     return private, parsed
+
+
+def _packet_changed(message: str) -> FlowError:
+    return FlowError(
+        f"{message} This round can no longer be reviewed.",
+        code="review.packet_changed",
+        action=_new_round_action(),
+    )
 
 
 def _live_inputs_match(record: Record, private: _PrivateInputs) -> bool:
@@ -657,14 +966,35 @@ def _check_report(
     ):
         seen = [item.id for item in results]
         if set(seen) != set(ids) or len(set(seen)) != len(seen):
-            raise ValueError(f"report must include every original {label} exactly once")
+            missing = [item for item in ids if item not in seen]
+            unexpected = sorted(set(seen) - set(ids))
+            duplicated = sorted({item for item in seen if seen.count(item) > 1})
+            raise _report_fix(
+                f"The report must judge every original {label} exactly once."
+                + (f" Missing: {', '.join(missing)}." if missing else "")
+                + (f" Unknown: {', '.join(unexpected)}." if unexpected else "")
+                + (f" Repeated: {', '.join(duplicated)}." if duplicated else ""),
+                fields=(f"{label}s",),
+                missing=missing,
+                unexpected=unexpected,
+                duplicated=duplicated,
+            )
     expected_reads = manifest["image_reads"]
     if sorted(report.reviewer.image_reads) != sorted(expected_reads):
-        raise ValueError(
-            "review receipt must record reading every target, render, and provided overlay"
+        actual = report.reviewer.image_reads
+        raise _report_fix(
+            "reviewer.image_reads must list every target, render and overlay in the "
+            "manifest, after opening each one.",
+            fields=("reviewer.image_reads",),
+            missing=[name for name in expected_reads if name not in actual],
+            unexpected=[name for name in actual if name not in expected_reads],
         )
     if manifest["parent_session_id"] not in (None, report.reviewer.parent_session_id):
-        raise ValueError("review receipt refers to a different parent session")
+        raise _report_fix(
+            "reviewer.parent_session_id differs from the session that prepared this round.",
+            fields=("reviewer.parent_session_id",),
+            expected=manifest["parent_session_id"],
+        )
     width, height = manifest["image_pixels"]
     views = json.loads((packet / "metrics.json").read_bytes())["views"]
     for item in (*report.conditions, *report.features, *report.findings):
@@ -673,8 +1003,16 @@ def _check_report(
             if evidence.view not in views or not (
                 0 <= left < right <= width and 0 <= top < bottom <= height
             ):
-                raise ValueError(
-                    "visual evidence must name a view and a valid pixel box"
+                item_id = item.description if isinstance(item, Finding) else item.id
+                raise _report_fix(
+                    f"Evidence for {item_id} must name one of the views "
+                    f"{', '.join(views)} and a pixel box inside {width} x {height}.",
+                    fields=("evidence",),
+                    item=item_id,
+                    view=evidence.view,
+                    bbox=list(evidence.bbox),
+                    views=list(views),
+                    image_pixels=[width, height],
                 )
 
     remaining = []
@@ -709,18 +1047,32 @@ def _check_report(
         if result.status == "simplified" and not (
             feature["category"] == "simplify" and feature.get("simplification")
         ):
-            raise ValueError(f"{result.id} has no agreed simplification")
+            raise _report_fix(
+                f"{result.id} is marked simplified, but its feature records no agreed "
+                "simplification.",
+                fields=("features",),
+                item=result.id,
+            )
         if result.status in ("partial", "missing"):
             blocked |= feature["importance"] == "required"
             remaining.append(f"{result.id} {feature['name']} {result.repair}")
     for item in report.findings:
         if item.check_id is not None and item.check_id not in checks_by_id:
-            raise ValueError(f"unknown original condition {item.check_id} in finding")
+            raise _report_fix(
+                f"A finding cites unknown condition {item.check_id}.",
+                fields=("findings",),
+                item=item.check_id,
+                conditions=list(checks_by_id),
+            )
         blocked |= item.required
         remaining.append(f"{item.description} {item.repair}")
     if blocked != (report.verdict == "needs_changes"):
-        raise ValueError(
-            "review verdict must follow the original conditions and required features"
+        expected = "needs_changes" if blocked else "passed"
+        raise _report_fix(
+            f"The verdict must be {expected} given the reported conditions, required "
+            "features and required findings.",
+            fields=("verdict",),
+            expected=expected,
         )
     return remaining, structural_evidence, structural_unresolved
 
@@ -745,22 +1097,59 @@ def _claim_session(record: Record, report: Report) -> None:
     path = record.path / "reviews" / "sessions" / session
     owner = report.round_id.encode("ascii")
     if not _publish_once(path, owner) and path.read_bytes() != owner:
-        raise ValueError("this independent session already reviewed another round")
+        raise FlowError(
+            "This independent reviewer session already reviewed another round.",
+            code="review.session",
+            action=edit(
+                "Dispatch a fresh reviewer, put its session ID in reviewer.session_id, "
+                "and submit the report again.",
+                FILE,
+                run("Submit the report.", "external", "review", RECORD, "--set", FILE),
+                fields=("reviewer.session_id",),
+            ),
+            extra={"round_open": True},
+        )
 
 
 def _submit(record: Record, raw: bytes) -> dict:
-    data = TypeAdapter(dict[str, Any]).validate_json(raw)
-    report = (FailedReport if "failure_reason" in data else Report).model_validate(data)
+    try:
+        data = TypeAdapter(dict[str, Any]).validate_json(raw)
+    except ValidationError as exc:
+        raise _report_fix(
+            "The report is not a JSON object.",
+            fields=("$",),
+            errors=validation_errors(exc),
+        ) from None
+    model = FailedReport if "failure_reason" in data else Report
+    try:
+        report = model.model_validate(data)
+    except ValidationError as exc:
+        errors = validation_errors(exc)
+        raise _report_fix(
+            validation_message("The report", errors),
+            fields=tuple(dict.fromkeys(item["path"] for item in errors)),
+            errors=errors,
+        ) from None
     round_path = _round_path(record, report.round_id)
+    if not (round_path / "bindings.json").is_file():
+        raise _report_fix(
+            f"No review round {report.round_id} exists for this record.",
+            fields=("round_id",),
+            round_id=report.round_id,
+        )
     private, manifest = _read_manifest(round_path)
     if report.input_sha256 != private.manifest_sha256:
-        raise ValueError("review report does not match the original input digest")
+        raise _report_fix(
+            "input_sha256 does not match this round's frozen inputs.",
+            fields=("input_sha256",),
+            expected=private.manifest_sha256,
+        )
     report_data = report.model_dump(mode="json")
     destination = round_path / "review.json"
     if destination.is_file():
         existing = json.loads(destination.read_bytes())
         if existing["report"] != report_data:
-            raise ValueError("this review round already has a different report")
+            raise _round_closed()
         return existing
 
     remaining: list[str] = []
@@ -806,11 +1195,19 @@ def _submit(record: Record, raw: bytes) -> dict:
     if not _publish_once(destination, _json(result)):
         existing = json.loads(destination.read_bytes())
         if existing["report"] != report_data:
-            raise ValueError("this review round already has a different report")
+            raise _round_closed()
         return existing
     if status == "accepted":
         _replace(record.path / "review.json", _json(result))
     return result
+
+
+def _round_closed() -> FlowError:
+    return FlowError(
+        "This review round already has a different report and is closed.",
+        code="review.round_closed",
+        action=_new_round_action(),
+    )
 
 
 def submit_review(record: Record, path: Path) -> dict:
@@ -849,3 +1246,67 @@ def review_status(record: Record, snapshot_id: str) -> dict:
         "current": latest is not None,
         "dispatch": latest["report"]["reviewer"]["dispatch"] if latest else None,
     }
+
+
+def review_progress(
+    record: Record, snapshot_id: str | None, mpd_path: str | None
+) -> dict:
+    """Where the current snapshot stands between rendering and a submitted report."""
+    progress: dict[str, Any] = {"render": None, "comparison": None, "open_round": None}
+    try:
+        render_bytes = _render_path(record).read_bytes()
+        render = _Render.model_validate_json(render_bytes)
+    except (OSError, ValueError):
+        return progress
+    try:
+        model_digest = _hash(Path(mpd_path).read_bytes()) if mpd_path else None
+    except OSError:
+        model_digest = None
+    cameras = _cameras_path(record, render)
+    progress["render"] = {
+        "alignment": render.alignment,
+        "views": list(render.views),
+        "cameras": str(cameras) if cameras else None,
+        "current": bool(
+            snapshot_id
+            and render.snapshot_id == snapshot_id
+            and render.source_sha256 == record.source_sha256
+            and render.model_sha256 == model_digest
+        ),
+    }
+    try:
+        comparison = _Comparison.model_validate_json(
+            _comparison_path(record).read_bytes()
+        )
+        references = [
+            record.path / asset.path for asset in comparison.references.values()
+        ]
+        current = comparison.render.sha256 == _hash(render_bytes) and all(
+            _hash(path.read_bytes()) == asset.sha256
+            for path, asset in zip(
+                references, comparison.references.values(), strict=True
+            )
+        )
+        parents = {path.parent for path in references}
+        progress["comparison"] = {
+            "current": current,
+            "reference_dir": str(parents.pop()) if len(parents) == 1 else None,
+        }
+    except (OSError, ValueError):
+        pass
+    rounds = sorted(
+        (record.path / "reviews").glob("*/bindings.json"),
+        key=lambda path: path.stat().st_mtime_ns,
+        reverse=True,
+    )
+    for bindings in rounds:
+        round_path = bindings.parent
+        if (round_path / "review.json").exists():
+            continue
+        if review_inputs_current(record, round_path.name):
+            progress["open_round"] = {
+                "round_id": round_path.name,
+                "report_path": str((round_path / "report.json").resolve()),
+            }
+            break
+    return progress

@@ -28,7 +28,7 @@ uv run brickwright knowledge show hinged-panels
 
 ## 交付带参考图的任务
 
-用 `external init "题目摘要" --flow --task-json task.json` 开始流程记录。先提交特征和规划，验证整件，再按题目机位渲染并评审当前版本。主代理可以自评。`external status ID` 会列出当前快照和阻断项。命令顺序和必需输入见[流程说明](src/brickwright/skill/references/flow.md)。
+用 `external init "题目摘要" --flow --task-json task.json` 开始流程记录。先提交特征和规划，验证整件，再按题目机位渲染并评审当前版本。主代理可以自评。每条 `external` 命令只输出一个 JSON，其中 `next` 给出下一步：直接执行的命令、先改文件再执行的命令，或需要补充题目输入的命令。`external status ID` 会列出当前快照、全部阻断项和同一个 `next`。命令顺序和必需输入见[流程说明](src/brickwright/skill/references/flow.md)。
 
 成功执行 `external finalize ID` 后，把该记录的 `out/build.ldr` 原样复制到题目指定的位置。使用同一个 `--records-dir` 或保留原工作目录和环境设置运行接收命令，将 `model.mpd` 换成实际提交文件的路径。
 

@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
+from brickwright.actions import FILE, RECORD, edit, run
 from brickwright.tools.diagnostics import Diagnostic
 
 if TYPE_CHECKING:
@@ -214,6 +215,15 @@ def artifact_error(
     message: str,
     **evidence: Any,
 ) -> Diagnostic:
+    action = None
+    if name in ("features", "plan"):
+        field = evidence.get("path")
+        action = edit(
+            f"Correct the {name} JSON and submit it again.",
+            FILE,
+            run(f"Submit the {name}.", "external", name, RECORD, "--set", FILE),
+            fields=(field,) if isinstance(field, str) else (),
+        )
     return Diagnostic(
         code=f"flow.{name}",
         stage="flow",
@@ -224,7 +234,39 @@ def artifact_error(
             if name == "conditions"
             else _command(record, name)
         ),
+        action=action,
     )
+
+
+def write_drafts(record: Record) -> None:
+    """Start feature and plan drafts that list the original condition IDs."""
+    drafts = record.path / "drafts"
+    drafts.mkdir(exist_ok=True)
+    checks = read_conditions(record).checks
+    features = {
+        "schema_version": 1,
+        "features": [
+            {
+                "id": check.id,
+                "name": "",
+                "description": "",
+                "category": "retain",
+                "importance": "required",
+                "evidence": [{"check_id": check.id}],
+                "rationale": "",
+            }
+            for check in checks
+        ],
+    }
+    plan = {
+        "schema_version": 1,
+        "bounds": {"minimum": [0, 0, 0], "maximum": [0, 0, 0]},
+        "colors": [],
+    }
+    for name, document in (("features", features), ("plan", plan)):
+        path = drafts / f"{name}.json"
+        if not path.exists():
+            path.write_text(json.dumps(document, indent=2, ensure_ascii=False) + "\n")
 
 
 def read_conditions(record: Record) -> Conditions:
@@ -411,6 +453,11 @@ def read_artifact(record: Record, name: Artifact) -> dict:
         if path.exists()
         else _response(name, None, [])
     )
+    if name == "review":
+        from .._review_reports import FailedReport, Report
+
+        data["schema"] = Report.model_json_schema()
+        data["failed_attempt_schema"] = FailedReport.model_json_schema()
     if name == "features" and record.read_meta().flow:
         try:
             data["conditions"] = read_conditions(record).model_dump(mode="json")

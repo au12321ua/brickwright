@@ -27,6 +27,28 @@ def _external(record, config, command, *args):
     return json.loads(result.output)
 
 
+def _as_cli(payload):
+    """The library payload as the CLI prints it: one copy of each message, plus next."""
+    if isinstance(payload, list):
+        return [_as_cli(item) for item in payload]
+    if not isinstance(payload, dict):
+        return payload
+    payload = {key: _as_cli(value) for key, value in payload.items()}
+    evidence = payload.get("evidence")
+    if isinstance(evidence, dict) and evidence.get("exception_message") == payload.get(
+        "message"
+    ):
+        payload["evidence"] = {
+            key: value for key, value in evidence.items() if key != "exception_message"
+        }
+    return payload
+
+
+def _without_next(cli):
+    assert "next" in cli
+    return {key: value for key, value in cli.items() if key != "next"}
+
+
 @pytest.mark.parametrize(
     "source,stage,code,line",
     [
@@ -57,21 +79,21 @@ def test_execution_provenance_matches_cli(
     record = make_record(source)
     payload = json.loads(validate(record, config).agent_json())
     cli = _external(record, config, "validate")
-    assert cli["diagnostics"] == payload["diagnostics"]
+    assert cli["diagnostics"] == _as_cli(payload["diagnostics"])
     (issue,) = cli["diagnostics"]
     assert (issue["stage"], issue["code"]) == (stage, code)
     assert issue["evidence"]["source"]["file"] == "build.py"
     assert issue["evidence"]["source"]["line"] == line
     assert issue["evidence"]["source"]["text"] == source.splitlines()[line - 1]
     assert issue["evidence"]["exception_type"] == cli["error_type"]
-    assert issue["evidence"]["exception_message"]
+    assert issue["message"]
     assert cli["checks"] == []
     archived = config.records_dir / record.id / cli["report_path"]
     assert (
         sha256(archived.with_name("build.py").read_bytes()).hexdigest()
         == cli["source_sha256"]
     )
-    assert json.loads(archived.read_text()) == cli
+    assert _as_cli(json.loads(archived.read_text())) == _without_next(cli)
 
 
 @pytest.mark.parametrize(
@@ -87,7 +109,7 @@ def test_explore_identifies_the_source_that_failed(
     record = make_record("def create_build():\n    raise ValueError('build problem')\n")
     report = explore(record, snippet, config)
     cli = _external(record, config, "explore", "--code", snippet)
-    assert cli == report.model_dump(mode="json")
+    assert _without_next(cli) == _as_cli(report.model_dump(mode="json"))
     (issue,) = cli["diagnostics"]
     assert issue["evidence"]["source"]["file"] == file
     assert issue["evidence"]["source"]["line"] == line
@@ -170,9 +192,9 @@ def test_export_failure_distinguishes_successful_validation(
     assert cli["validation"]["ok"] and not cli["ok"]
     (issue,) = cli["diagnostics"]
     assert (issue["stage"], issue["code"]) == ("export", "output.export_failed")
-    assert issue["evidence"]["exception_message"] == "export fixture failed"
+    assert issue["message"].endswith("export fixture failed")
     assert issue["evidence"]["path"] == "out/build.ldr"
-    assert report.model_dump(mode="json")["diagnostics"] == cli["diagnostics"]
+    assert _as_cli(report.model_dump(mode="json")["diagnostics"]) == cli["diagnostics"]
     assert not record.ldr_path.exists()
 
 
@@ -277,7 +299,7 @@ def test_render_library_failure_is_actionable_through_both_entries(
     assert (issue["stage"], issue["code"]) == ("render", "output.ldraw_library_missing")
     assert issue["evidence"]["environment_variable"] == "LDRAW_LIBRARY_PATH"
     assert "LDRAW_LIBRARY_PATH" in issue["next_action"]
-    assert report.model_dump(mode="json")["diagnostics"] == cli["diagnostics"]
+    assert _as_cli(report.model_dump(mode="json")["diagnostics"]) == cli["diagnostics"]
 
 
 def test_static_check_evidence_names_repeated_submodel_occurrences():
@@ -310,7 +332,7 @@ def test_missing_connector_annotations_use_official_catalog_facts(
     )
     report = explore(record, snippet, config)
     cli = _external(record, config, "explore", "--code", snippet)
-    assert cli["diagnostics"] == report.model_dump(mode="json")["diagnostics"]
+    assert cli["diagnostics"] == _as_cli(report.model_dump(mode="json")["diagnostics"])
     (issue,) = cli["diagnostics"]
     capabilities = lookup_part("10040")
     assert issue["stage"] == "explore"
@@ -330,7 +352,7 @@ def test_a_nonexistent_catalog_id_is_distinct_from_missing_annotations(
     snippet = 'bricklayer.PartSpec("diagnostic-fixture-outside-release")'
     report = explore(record, snippet, config)
     cli = _external(record, config, "explore", "--code", snippet)
-    assert cli["diagnostics"] == report.model_dump(mode="json")["diagnostics"]
+    assert cli["diagnostics"] == _as_cli(report.model_dump(mode="json")["diagnostics"])
     (issue,) = cli["diagnostics"]
     assert issue["stage"] == "explore"
     assert issue["code"] == "catalog.unknown_part"

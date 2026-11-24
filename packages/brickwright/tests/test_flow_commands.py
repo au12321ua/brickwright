@@ -20,24 +20,38 @@ def test_external_flow_import_and_workflow_read(tmp_path: Path, monkeypatch):
     runner = CliRunner()
     result = runner.invoke(app, ["external", "init", "a boat", "--flow"])
     assert result.exit_code == 0, result.output
-    record_id = dict(line.split("=", 1) for line in result.stdout.splitlines())[
-        "record_id"
-    ]
+    created = json.loads(result.stdout)
+    record_id = created["record_id"]
+    draft = records / record_id / "drafts/features.json"
+    assert created["next"]["kind"] == "edit"
+    assert created["next"]["path"] == str(draft.resolve())
+    assert [item["id"] for item in json.loads(draft.read_text())["features"]] == ["C01"]
     config = Config(records_dir=records, flow=True)
     record = Record.load(config, record_id)
     assert record.read_meta().flow
     features = runner.invoke(app, ["external", "features", record_id])
     assert features.exit_code == 0, features.output
-    assert json.loads(features.stdout) == read_artifact(record, "features")
+    shown = json.loads(features.stdout)
+    assert shown.pop("ok") is True and shown.pop("next") is None
+    assert shown == read_artifact(record, "features")
     status = runner.invoke(app, ["external", "status", record_id])
     assert status.exit_code == 0, status.output
     assert not json.loads(status.stdout)["ready"]
     invalid = tmp_path / "bad.json"
     invalid.write_text("{")
     result = runner.invoke(app, ["external", "plan", record_id, "--set", str(invalid)])
-    assert result.exit_code != 0
-    assert result.exception is not None
-    assert "JSON" in result.output
+    assert result.exit_code == 1
+    payload = json.loads(result.stdout)
+    assert "JSON" in payload["error"]
+    assert payload["diagnostics"][0]["code"] == "flow.plan"
+    assert payload["next"]["kind"] == "edit"
+    assert payload["next"]["path"] == str(invalid.absolute())
+    assert payload["next"]["then"]["argv"][-4:] == [
+        "--set",
+        str(invalid.absolute()),
+        "--records-dir",
+        str(records.absolute()),
+    ]
 
 
 def test_flow_preview_does_not_publish_a_formal_ldraw(

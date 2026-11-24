@@ -9,6 +9,8 @@ from pathlib import Path
 from bricklayer.diagnostics import DiagnosticError
 from pydantic import BaseModel, ConfigDict, Field, JsonValue
 
+from ..actions import Action
+
 
 class Diagnostic(BaseModel):
     """A stable reason, observed evidence, and an optional recovery action."""
@@ -20,6 +22,7 @@ class Diagnostic(BaseModel):
     message: str
     evidence: dict[str, JsonValue] = Field(default_factory=dict)
     next_action: str | None = None
+    action: Action | None = None
 
 
 class DiagnosticReport(BaseModel):
@@ -46,6 +49,7 @@ def exception_diagnostic(
         "exception_type": type(exc).__name__,
         "exception_message": str(exc),
     }
+    action = getattr(exc, "action", None)
     if isinstance(exc, DiagnosticError):
         code = exc.code
         facts.update(exc.evidence)
@@ -75,6 +79,7 @@ def exception_diagnostic(
         else str(exc) or type(exc).__name__,
         evidence=facts,
         next_action=next_action,
+        action=action if isinstance(action, Action) else None,
     )
 
 

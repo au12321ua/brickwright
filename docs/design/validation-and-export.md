@@ -26,6 +26,18 @@ workflow 接口和外部 CLI 在失败报告的 `diagnostics` 中给出原因码
 
 正式导出从嵌套的 `validation.diagnostics` 传递模型验证问题。模型通过检查后发生的渲染或导出错误出现在正式导出报告自己的 `diagnostics` 中。知识库可用稳定原因码检索，例如 `brickwright knowledge search connector.ambiguous`。[诊断数据结构](../../packages/brickwright/src/brickwright/tools/diagnostics.py) · [执行诊断测试](../../packages/brickwright/tests/tools/test_execution_diagnostics.py) · [从歧义孔位修复到导出](../../packages/brickwright/tests/tools/test_connection_repair.py)
 
+### CLI 结果与下一步
+
+`external` 下的命令每次只在 stdout 输出一个 JSON 对象，包含 `ok` 和 `next`。操作达到目的时退出 0，失败或被阻断时退出 1。失败时 `error` 给出一句原因，`diagnostics` 逐条列出。参数错误、找不到记录、子进程异常和交付拒收都用同一形状，stderr 不再出现 traceback。`exception_message` 与消息相同时不再重复；pydantic 错误压成一句摘要，证据按 `path` 和 `reason` 列出。提交失败时不附 schema，需要时用不带 `--set` 的命令读取。`init` 和 `module init` 也返回 JSON。[CLI 信封](../../packages/brickwright/src/brickwright/cli.py)
+
+`next` 是唯一的首选动作，分三类：`run` 给出 `argv` 和 `command`；`edit` 给出要改的 `path` 和 `fields`，以及之后要执行的 `then`；`provide` 列出宿主需补充的 `placeholders`，例如 `CAMERAS_JSON`、`REFERENCE_DIR`、`SUBMISSION_MPD`，补齐后执行 `then`。库代码只用参数和占位符描述动作；CLI 用本次调用的解释器、记录目录的绝对路径、完整记录 ID 和实际提交的文件拼出参数。诊断自身的 `next_action` 字符串保留，与 `next` 重复时只写摘要。[动作模型](../../packages/brickwright/src/brickwright/actions.py)
+
+`status` 与各命令的兜底都取同一个首选动作：依次为特征、规划、写模型并验证、按机位渲染、对比、准备评审轮次、填写回执、定稿和交付核对。`build.py` 仍是模板时先要求写模型；渲染或对比已经过期时，复用上次的机位文件和参考目录；评审已被采纳但需要修改且轮数未用尽时，要求返工。`init` 为流程记录写出 `drafts/features.json` 和 `drafts/plan.json`，特征草稿按原题条件逐条列出。[首选动作](../../packages/brickwright/src/brickwright/flow/guide.py) · [恢复回归](../../packages/brickwright/tests/test_recovery.py)
+
+`review-instructions` 在轮次目录写出 `instructions.md` 和预填的 `report.json`，返回包目录和两份文件的路径。`review --set` 的结果分三层：`receipt` 为 `accepted`、`stale` 或 `failed`，`counted` 与 `rounds` 说明是否计入轮数及剩余轮数，`deliverable` 说明当前快照能否定稿。`stale` 退出 1。回执字段错误时不写入、轮次保持开放（`round_open`），证据列出缺少、未知或重复的编号。`review ID` 展示普通报告的 schema，并另给失败尝试的格式。
+
+子进程内的普通异常把类型和消息交回父进程，记为 `execution.child_exception`；超时和异常退出分别报告。只有实际渲染时才检查 LDraw 库，缺库时记为 `render.ldraw_missing`；`compare` 只读取已渲染的图像。
+
 ## 连接查询与试装证据
 
 宿主代理的 Python 脚本可以调用同一 SDK，再查看两个证据字典。
@@ -48,7 +60,7 @@ print(query, trials)
 
 创建记录时指定 `--flow --task-json FILE` 可导入原始条件。先通过 `external features` 和 `external plan` 记录特征与事先声明的独立物件、装饰简化项以及模块接口。每次整件验证同时检查记录内模型与干净进程中从相同 MPD 字节重读的标准模型，核对件数、连通组件、具体断口、碰撞和支撑。可检索的报告保留完整实例清单，代理收到结构摘要和报告位置。[结构接口](../../packages/brickwright/src/brickwright/flow/structure.py) · [两种 SDK 的归档复放](p004-structure-evaluation.md)
 
-`external status ID` 显示结构快照、当前评审和阻断条件。模块接口必须实际接合。装饰断口只在有事前声明、同件对与位姿的版本化缺项证据且两栏物理检查均合格时列为交付限制。改动父源码、规划、合并清单或校验数据会使结构证据过期。渲染、评审和定稿绑定已检查的整件。最后一轮需要修改时，只有有效预算用尽、当前版已评且列明遗留项，才允许带遗留项交付。预算按整条记录累计已接受的评审轮次，默认 2 轮，可在 `external init --review-rounds N` 时设定。对比要求参考目录按机位名提供 `goal-<机位>.png`，缺图时报出缺少的文件名。已按机位渲染而未对比时，`review-instructions` 提示先运行 `compare`，不再转入视角匹配。[U-09](../decisions.md#u-09--有证据的装饰接口缺项可带限制放行) · [状态计算](../../packages/brickwright/src/brickwright/flow/state.py)
+`external status ID` 显示结构快照、当前评审、全部阻断条件和首选的 `next`。模块接口必须实际接合。装饰断口只在有事前声明、同件对与位姿的版本化缺项证据且两栏物理检查均合格时列为交付限制。改动父源码、规划、合并清单或校验数据会使结构证据过期。渲染、评审和定稿绑定已检查的整件。最后一轮需要修改时，只有有效预算用尽、当前版已评且列明遗留项，才允许带遗留项交付。预算按整条记录累计已接受的评审轮次，默认 2 轮，可在 `external init --review-rounds N` 时设定。对比要求参考目录按机位名提供 `goal-<机位>.png`，缺图时报出缺少的文件名。已按机位渲染而未对比时，`review-instructions` 提示先运行 `compare`，不再转入视角匹配。[U-09](../decisions.md#u-09--有证据的装饰接口缺项可带限制放行) · [状态计算](../../packages/brickwright/src/brickwright/flow/state.py)
 
 ## demo 交付接收
 

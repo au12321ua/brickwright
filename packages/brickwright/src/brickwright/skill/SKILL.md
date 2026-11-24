@@ -17,8 +17,8 @@ For a quick build, initialize a local record:
 brickwright external init "Stack two 2 × 4 bricks"
 ```
 
-The command prints a record ID and the editable `build.py` path. A starter
-with two connected parts looks like this:
+The command prints a JSON result with the record ID, the editable `build.py`
+path and the next step. A starter with two connected parts looks like this:
 
 ```python
 import bricklayer as bl
@@ -44,6 +44,24 @@ Run `brickwright external validate ID` after edits and inspect the reported chec
 and diagnostics. For a quick build, `brickwright external finalize ID` writes
 `out/build.ldr` inside the record directory. For a flow record, finish its
 [render, review, and delivery steps](references/flow.md) first.
+
+## Follow `next`
+
+Every `external` command prints one JSON object with `ok` and `next`. The exit
+code is 0 when the command did its job and 1 when it failed or is blocked.
+`next` is the one step to take now:
+
+- `run`: execute `argv` exactly as given.
+- `edit`: change the file at `path` (`fields` names what to change), then execute
+  `then.argv`.
+- `provide`: supply each input named in `placeholders`, such as a file from the
+  task, substitute it in `then.argv`, and execute that.
+
+Read the new result and continue the same way. `diagnostics` explains why a
+command failed. Treat workflow, path and environment problems by following
+`next`. For modeling problems such as collisions, unsupported parts or ambiguous
+connectors, also search the knowledge base with the diagnostic code.
+`brickwright external status ID` lists every open gate and the same `next`.
 
 - For a connection technique or a repair, run `brickwright knowledge search QUERY`
   with a build question, part ID, or diagnostic code. Read the match's `path`

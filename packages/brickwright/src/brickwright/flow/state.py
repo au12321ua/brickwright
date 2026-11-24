@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, ConfigDict
 
+from brickwright.actions import RECORD, run
 from brickwright.tools.diagnostics import Diagnostic
 
 from .artifacts import (
@@ -209,7 +210,10 @@ def flow_status(record: Record, *, include_review: bool = True) -> dict[str, Any
                 code="flow.structure",
                 stage="flow",
                 message="The current source and plan require a passing two-column structure check.",
-                next_action=f"brickwright external validate {record.id}",
+                next_action="Validate the current build.py.",
+                action=run(
+                    "Validate the current build.py.", "external", "validate", RECORD
+                ),
             )
         )
     if structure is not None:
@@ -252,7 +256,10 @@ def flow_status(record: Record, *, include_review: bool = True) -> dict[str, Any
                     code="flow.review",
                     stage="flow",
                     message="Review the current structural snapshot in the builder session or with a separate reviewer.",
-                    next_action=f"brickwright external review-instructions {record.id}",
+                    next_action=(
+                        "Render, compare and review the current snapshot; status gives "
+                        "the step that is due."
+                    ),
                 )
             )
     artifacts = {}

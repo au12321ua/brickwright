@@ -14,6 +14,7 @@ from bricklayer.geometry import Vec3
 from bricklayer.ldraw.conversion import LDRAW_TO_STUD, LDrawVec
 from pydantic import BaseModel, ConfigDict, Field
 
+from ..actions import run
 from ..record import Meta, Record, Snapshot, Status
 from ..tools.diagnostics import Diagnostic, exception_diagnostic
 from .contracts import ModuleError, digest, json_bytes, read_contracts
@@ -193,6 +194,14 @@ def _require_current_contract(child: Record) -> bytes:
             f"Module {child.id} needs its current contract: {exc}",
             evidence={"module": child.id},
             next_action=f"Run brickwright external module init {child_path.parent.parent.name} {child.id}.",
+            action=run(
+                "Refresh the module contract.",
+                "external",
+                "module",
+                "init",
+                child_path.parent.parent.name,
+                child.id,
+            ),
         ) from exc
 
 
