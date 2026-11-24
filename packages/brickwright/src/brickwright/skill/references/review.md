@@ -35,6 +35,14 @@ condition `C01`, name its check `C01` or use a prefix such as
 `C01_axle_clearance` so the review packet can associate the result with the
 condition. Record the specific repairs needed and any unresolved items.
 
+The original conditions are a minimum. Also compare colour regions, markings
+and proportions. Mark a finding `required` when it changes a view's outline,
+colour layout or proportions and you can still repair it with the allowed
+parts. Leave it unrequired only when the parts, piece limit or connections
+prevent a closer match, and say why in its `repair`. A required finding blocks
+`passed`, so the next round goes to the repair. Once the rounds are used up,
+the remaining items are delivered as described below.
+
 Submit with `brickwright external review ID --set REPORT`. If required images
 are unavailable, replace the report with `schema_version`, `round_id`,
 `input_sha256` and `failure_reason`; this archives a failed attempt that does not

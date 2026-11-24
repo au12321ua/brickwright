@@ -15,7 +15,9 @@ that submits it. `brickwright external features ID` and `plan ID` show the JSON
 schemas. Every later step follows the same pattern: take `next` from the result,
 and use `brickwright external status ID` to see every open gate.
 
-Preserve the original check IDs. For additional visible features, cite a view and region.
+Preserve the original check IDs. The original checks rarely cover the whole look,
+so also add visible features such as main colour regions, markings and
+proportions. Cite a view and region for each.
 Declare the scale, palette, intended separate objects, and any allowed decorative
 simplification before building. If the design needs contracted modules, use the
 [module workflow](modules.md).

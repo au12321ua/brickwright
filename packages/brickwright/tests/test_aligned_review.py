@@ -244,6 +244,14 @@ def _open_round(record):
     }
 
 
+def test_instructions_require_repairable_visible_differences(reviewed_record):
+    record, _, _ = reviewed_record
+    instructions = review.review_instructions(record, parent_session_id="builder")
+    assert "colour regions, markings and proportions" in instructions
+    assert "the builder can still repair" in instructions
+    assert "state in the repair why" in instructions
+
+
 def _submit(record, report, tmp_path):
     path = tmp_path / "report.json"
     path.write_text(json.dumps(report))
