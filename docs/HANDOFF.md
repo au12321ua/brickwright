@@ -25,6 +25,8 @@ P-007 已完成官方组合条目的全量筛查。默认预算内等价命中�
 
 两项验收取舍已确认。事先声明可简化的装饰接口，在具体缺项有证据且两栏结构检查通过时可带限制交付。六题按整组检验交付、平台分和原始条件满足数不退步，喷气机用同机位盲评展示局部改善。[U-09](decisions.md#u-09--有证据的装饰接口缺项可带限制放行) · [U-10](decisions.md#u-10--六题整体不退步并展示局部改善)
 
+[P-008](proposals/P-008-skill-and-sdk.md)已获准实施。宿主通过分主题 skill 获取知识和 API 参考，开发后选一道题验证。demo 可自评，只接收成功定稿且与已验证快照内容一致的 MPD。[U-12](decisions.md#u-12--演示从简并允许调整数据集与接口) · [U-13](decisions.md#u-13--只交付定稿快照并在开发后实测)
+
 ## 连接装配、知识查询和零件覆盖
 
 - 从搭建意图查件可用 `bricklayer.find_connection_pairs`。已有模型可用 `find_connection_candidates` 查安装姿态，`trial_connections` 试装，`place_connection` 提交。内置代理和外部代理可收到同一组执行原因码、现场证据和修复建议。[连接驱动装配提案](proposals/P-001-connection-driven-building.md)
