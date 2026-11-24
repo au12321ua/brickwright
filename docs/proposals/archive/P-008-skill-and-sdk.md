@@ -59,4 +59,4 @@ demo 只接收 `finalize` 成功的那一版模型，接收时逐字节核对提
 
 宿主现在可安装 skill，按搭建动作打开六个 API 主题，或按诊断码、零件号和意图取得知识条目及其示例。内置代理和 LiteLLM 已移除。自评与独立评审共用冻结图像，交付回执记录评审方式、快照 ID 和 MPD 的 SHA-256。[使用入口](../../../packages/brickwright/README.md)
 
-`external verify-delivery ID FILE` 已接入蓝色动力喷气机单题的接收端。离线集成测试用两块砖走通结构验证、自评、定稿和接收，并覆盖缺少定稿、文件字节改变和评审依据过期时的拒收。工作区测试通过 2,737 项，跳过 7 项，Ruff 检查、格式检查和 ty 通过。两份 wheel 和 Harbor 任务可在本地准备，真实宿主代理验收按 U-13 留到开发后。[单题准备](../../../demo/omr36/README.md) · [交付回归](../../../packages/brickwright/tests/test_flow.py)
+`external verify-delivery ID FILE` 已接入蓝色动力喷气机单题的接收端。离线集成测试用两块砖走通结构验证、自评、定稿和接收，并覆盖缺少定稿、文件字节改变和评审依据过期时的拒收。工作区测试通过 2,737 项，跳过 7 项，Ruff 检查、格式检查和 ty 通过。两份 wheel 和 Harbor 任务可在本地准备，真实宿主代理验收按 U-13 留到开发后。[单题演示交接](../../HANDOFF.md#单题演示的交付状态) · [交付回归](../../../packages/brickwright/tests/test_flow.py)

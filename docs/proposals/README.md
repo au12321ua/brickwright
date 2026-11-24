@@ -20,7 +20,7 @@
 | P-008 | completed | [精简为 skill 与 SDK](archive/P-008-skill-and-sdk.md) |
 | P-009 | completed | [流程命令的可执行恢复](archive/P-009-actionable-flow-errors.md) |
 
-P-008 提供可自评的单题搭建演示，知识按需读取、API 按搭建动作拆页。数据集和旧接口可以随演示入口调整。[演示取舍](../decisions.md#u-12--演示从简并允许调整数据集与接口)
+P-008 用可自评的单题搭建演示验证宿主流程，知识按需读取，API 按搭建动作拆页。数据集和旧接口可以随演示入口调整。[单题演示交接](../HANDOFF.md#单题演示的交付状态) · [演示取舍](../decisions.md#u-12--演示从简并允许调整数据集与接口)
 
 P-001 已通过离线验收。首轮 Maestro 外部代理对照的质量与完成度持平，连接放置占比下降。铰链修复后的外部复测通过原五题三项条件，旧原生代理行为对照未运行，运行器随 P-008 移除。[复测结果](../design/p001-paired-evaluation.md#铰链修复复测结果) · [复测快照](http://localhost:8420/snapshots/snp_01m81459cgpjb3nee5gkwjz5tt)
 
