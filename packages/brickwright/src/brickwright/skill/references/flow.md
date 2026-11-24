@@ -28,11 +28,13 @@ Once both structure checks pass, render the frozen model at the supplied cameras
 
 ```sh
 brickwright external render ID --cameras cameras.json
-brickwright external compare ID --reference-dir reference_images
+brickwright external compare ID --reference-dir DIR
 ```
 
+`DIR` holds one `goal-<camera>.png` target for each camera name in `cameras.json`.
 Open the [review guide](review.md) to check visual conditions against the current
-render and submit a report. After changing the build, rerun validation, render
+render and submit a report. It also explains when a snapshot that still needs
+changes may be delivered. After changing the build, rerun validation, render
 the new snapshot at the same cameras, and review the new images.
 
 Run `brickwright external finalize ID`. After it succeeds, take the record's

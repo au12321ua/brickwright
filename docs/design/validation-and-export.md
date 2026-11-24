@@ -48,7 +48,7 @@ print(query, trials)
 
 创建记录时指定 `--flow --task-json FILE` 可导入原始条件。先通过 `external features` 和 `external plan` 记录特征与事先声明的独立物件、装饰简化项以及模块接口。每次整件验证同时检查记录内模型与干净进程中从相同 MPD 字节重读的标准模型，核对件数、连通组件、具体断口、碰撞和支撑。可检索的报告保留完整实例清单，代理收到结构摘要和报告位置。[结构接口](../../packages/brickwright/src/brickwright/flow/structure.py) · [两种 SDK 的归档复放](p004-structure-evaluation.md)
 
-`external status ID` 显示结构快照、当前评审和阻断条件。模块接口必须实际接合。装饰断口只在有事前声明、同件对与位姿的版本化缺项证据且两栏物理检查均合格时列为交付限制。改动父源码、规划、合并清单或校验数据会使结构证据过期。渲染、评审和定稿绑定已检查的整件。最后一轮需要修改时，只有有效预算用尽、当前版已评且列明遗留项，才允许带遗留项交付。[U-09](../decisions.md#u-09--有证据的装饰接口缺项可带限制放行) · [状态计算](../../packages/brickwright/src/brickwright/flow/state.py)
+`external status ID` 显示结构快照、当前评审和阻断条件。模块接口必须实际接合。装饰断口只在有事前声明、同件对与位姿的版本化缺项证据且两栏物理检查均合格时列为交付限制。改动父源码、规划、合并清单或校验数据会使结构证据过期。渲染、评审和定稿绑定已检查的整件。最后一轮需要修改时，只有有效预算用尽、当前版已评且列明遗留项，才允许带遗留项交付。预算按整条记录累计已接受的评审轮次，默认 2 轮，可在 `external init --review-rounds N` 时设定。对比要求参考目录按机位名提供 `goal-<机位>.png`，缺图时报出缺少的文件名。已按机位渲染而未对比时，`review-instructions` 提示先运行 `compare`，不再转入视角匹配。[U-09](../decisions.md#u-09--有证据的装饰接口缺项可带限制放行) · [状态计算](../../packages/brickwright/src/brickwright/flow/state.py)
 
 ## demo 交付接收
 

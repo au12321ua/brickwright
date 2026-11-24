@@ -7,7 +7,7 @@ Release branch: main
 
 ## 阅读与验证
 
-先读[交接](docs/HANDOFF.md)了解本分支的实现和验收状态。使用者从[根 README](README.md)安装并调用 skill。
+先读[交接](docs/HANDOFF.md)了解当前实现和验收状态。使用者从[根 README](README.md)安装并调用 skill。
 
 | 改动 | 从哪里读起 |
 | --- | --- |

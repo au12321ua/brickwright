@@ -1,7 +1,9 @@
 # Review the current render
 
 Use [the record workflow](flow.md) to validate and render the active snapshot.
-Match target image names to the camera names in the supplied camera file, then run
+The reference directory must contain one `goal-<camera>.png` for each camera name
+in the supplied camera file, such as `goal-top.png` for camera `top`. A task input
+directory may already use these names. Then run
 `brickwright external compare ID --reference-dir DIR`.
 
 Request the packet and report schema:
@@ -33,3 +35,11 @@ Submit with `brickwright external review ID --set report.json`. If required imag
 are unavailable, submit a failed attempt with the round binding and failure reason
 shown in the packet. When repairs change the model, validate and review the new
 snapshot before finalizing.
+
+Report the verdict the images support. A `needs_changes` verdict blocks
+`finalize`. The record allows a fixed number of accepted review rounds across all
+snapshots, two unless `external init --review-rounds N` set another number. When
+the round that uses up this budget reviews the current snapshot, returns
+`needs_changes` and lists each remaining item, `finalize` accepts that snapshot.
+Delivery then reports `review_outcome: rounds_exhausted`. Report those remaining
+items with the delivery. Do not change the verdict to `passed` to unblock delivery.
