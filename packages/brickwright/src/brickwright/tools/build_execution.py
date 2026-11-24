@@ -36,6 +36,26 @@ class ChildExited(RuntimeError):
         self.exit_code = exit_code
 
 
+class ChildFailed(ChildExited):
+    """A worker raised an exception; its type and message reached the parent."""
+
+    def __init__(self, exception_type: str, message: str) -> None:
+        RuntimeError.__init__(
+            self, f"{exception_type}: {message}" if message else exception_type
+        )
+        self.exit_code = 1
+        self.exception_type = exception_type
+        self.exception_message = message
+
+
+class _Failure:
+    """A picklable record of an exception raised inside a worker."""
+
+    def __init__(self, exc: Exception) -> None:
+        self.exception_type = type(exc).__name__
+        self.message = str(exc)
+
+
 def subprocess_diagnostic(exc: Exception, operation: str, timeout: float) -> Diagnostic:
     """Expose facts available to the parent when a worker returned no report."""
     evidence: dict[str, JsonValue] = {"operation": operation}
@@ -47,6 +67,18 @@ def subprocess_diagnostic(exc: Exception, operation: str, timeout: float) -> Dia
             evidence=evidence | {"timeout_seconds": timeout},
             next_action="Reduce the work done by this operation or retry with a longer timeout.",
         )
+    if isinstance(exc, ChildFailed):
+        return Diagnostic(
+            code="execution.child_exception",
+            stage=operation,
+            message=str(exc),
+            evidence=evidence
+            | {
+                "exception_type": exc.exception_type,
+                "exception_message": exc.exception_message,
+            },
+            next_action="Correct the reported cause and run the same command again.",
+        )
     if isinstance(exc, ChildExited):
         evidence["exit_code"] = exc.exit_code
     return Diagnostic(
@@ -54,7 +86,10 @@ def subprocess_diagnostic(exc: Exception, operation: str, timeout: float) -> Dia
         stage=operation,
         message=str(exc),
         evidence=evidence,
-        next_action="Check the worker's stderr for the cause of the exit.",
+        next_action=(
+            "The worker process ended abnormally, for example after running out of memory. "
+            "Reduce the work done by this operation and run it again."
+        ),
     )
 
 
@@ -121,16 +156,20 @@ def run_in_subprocess(fn: Callable, args: tuple[Any, ...], timeout: float) -> An
         deadline = time.monotonic() + timeout
         while proc.is_alive() and time.monotonic() < deadline:
             try:
-                return result.get(timeout=_POLL_INTERVAL)  # pragma: no mutate
+                value = result.get(timeout=_POLL_INTERVAL)  # pragma: no mutate
             except queue.Empty:
                 continue
+            return _unwrap(value)
         if proc.is_alive():
             raise TimeoutError(f"timed out after {timeout}s")
         try:
             # Short timeout covers the queue's flush
-            return result.get(timeout=0.5)  # pragma: no mutate -- null deadlocks mutmut
+            value = result.get(
+                timeout=0.5
+            )  # pragma: no mutate -- null deadlocks mutmut
         except queue.Empty:
             raise ChildExited(proc.exitcode) from None
+        return _unwrap(value)
     finally:
         proc.join(timeout=_POLL_INTERVAL)
         if proc.is_alive():
@@ -144,4 +183,14 @@ def run_in_subprocess(fn: Callable, args: tuple[Any, ...], timeout: float) -> An
 
 
 def _worker(fn: Callable, args: tuple[Any, ...], result: Queue) -> None:
-    result.put(fn(*args))
+    try:
+        value = fn(*args)
+    except Exception as exc:  # the parent reports the cause
+        value = _Failure(exc)
+    result.put(value)
+
+
+def _unwrap(value: Any) -> Any:
+    if isinstance(value, _Failure):
+        raise ChildFailed(value.exception_type, value.message)
+    return value

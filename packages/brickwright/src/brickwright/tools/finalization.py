@@ -51,10 +51,17 @@ class DeliveryVerification(BaseModel):
 
     ok: bool
     error: str | None = None
+    code: str | None = None
     snapshot_id: str | None = None
     mpd_sha256: str | None = None
     review_outcome: str | None = None
     review_dispatch: str | None = None
+
+
+class _Rejected(ValueError):
+    def __init__(self, code: str, message: str) -> None:
+        super().__init__(message)
+        self.code = code
 
 
 def verify_delivery(record: Record, file: Path) -> DeliveryVerification:
@@ -66,28 +73,47 @@ def verify_delivery(record: Record, file: Path) -> DeliveryVerification:
             or not meta.finalized
             or meta.stop_reason is not StopReason.FINALIZED
         ):
-            raise ValueError("The record has no current successful flow finalization.")
+            raise _Rejected(
+                "delivery.not_finalized",
+                "The record has no current successful flow finalization.",
+            )
         if not file.is_file():
-            raise ValueError(f"The submitted MPD is missing or not a file: {file}")
+            raise _Rejected(
+                "delivery.missing_file",
+                f"The submitted MPD is missing or not a file: {file}",
+            )
         submitted = file.read_bytes()
         state = flow_status(record)
         if not state["ready"] or not state["finalized"]:
-            raise ValueError("The finalized flow evidence is no longer current.")
+            raise _Rejected(
+                "delivery.stale", "The finalized flow evidence is no longer current."
+            )
         frozen = Path(state["mpd_path"]).read_bytes()
         digest = sha256(frozen).hexdigest()
         if digest != state["mpd_sha256"] or record.ldr_path.read_bytes() != frozen:
-            raise ValueError("The finalized output differs from the verified snapshot.")
+            raise _Rejected(
+                "delivery.stale",
+                "The finalized output differs from the verified snapshot.",
+            )
         if submitted != frozen:
-            raise ValueError("The submitted MPD differs from the finalized snapshot.")
+            raise _Rejected(
+                "delivery.mismatch",
+                "The submitted MPD differs from the finalized snapshot.",
+            )
         current = record.read_meta()
         if (
             not current.finalized
             or current.stop_reason is not StopReason.FINALIZED
             or current.finalized_flow_sha256 != meta.finalized_flow_sha256
         ):
-            raise ValueError("The finalization changed during delivery verification.")
+            raise _Rejected(
+                "delivery.stale",
+                "The finalization changed during delivery verification.",
+            )
+    except _Rejected as exc:
+        return DeliveryVerification(ok=False, error=str(exc), code=exc.code)
     except (OSError, ValueError, KeyError, TypeError) as exc:
-        return DeliveryVerification(ok=False, error=str(exc))
+        return DeliveryVerification(ok=False, error=str(exc), code="delivery.stale")
     return DeliveryVerification(
         ok=True,
         snapshot_id=state["snapshot_id"],

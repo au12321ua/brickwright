@@ -6,6 +6,7 @@ import pytest
 from PIL import Image
 
 from brickwright import aligned_review as review
+from brickwright.actions import RECORD, FlowError
 from brickwright.record import Record
 
 
@@ -562,10 +563,19 @@ def test_uncompared_fixed_render_points_to_compare_not_viewpoint_matching(
     record.meta_path.write_text(
         json.dumps({"prompt": "Build a blue object", "prompt_image": portrait.name})
     )
-    with pytest.raises(ValueError) as error:
+    with pytest.raises(FlowError) as error:
         review.review_instructions(record, parent_session_id="builder")
-    message = str(error.value)
-    assert f"brickwright external compare {record.id} --reference-dir" in message
-    assert "goal-top.png" in message
-    assert "render-angle" not in message
+    assert error.value.code == "review.comparison_missing"
+    assert "goal-top.png" in str(error.value)
+    action = error.value.action
+    assert action is not None and action.kind == "provide"
+    assert action.then is not None
+    assert action.then.args == (
+        "external",
+        "compare",
+        RECORD,
+        "--reference-dir",
+        "REFERENCE_DIR",
+    )
+    assert "render-angle" not in str(error.value)
     assert not (record.path / "reviews").exists()

@@ -11,18 +11,29 @@ from typing import Annotated, Any, Literal
 import typer
 from rich.console import Console
 
+from .actions import (
+    FILE,
+    RECORD,
+    Action,
+    FlowError,
+    Invocation,
+    describe,
+    edit,
+    provide,
+    run,
+)
 from .config import DEFAULT_RECORDS_DIR, RECORDS_DIR_ENV, Config
 from .external_critique import DEFAULT_CRITIQUE_ROUNDS, external_critique_instructions
 from .knowledge import read_knowledge, search_knowledge
-from .record import Record, Timing, ValidationFailures, list_records
+from .record import Record, RecordNotFound, Timing, ValidationFailures, list_records
 from .skill import app as skill_app
 from .skill import external_instructions
-from .tools import FinalizationReport, RenderReport, SnippetResult, ValidationReport
 from .tools import explore as explore_record
 from .tools import finalize as finalize_record
 from .tools import render as render_record
 from .tools import render_angle as render_angle_record
 from .tools import validate as validate_record
+from .tools.diagnostics import Diagnostic
 from .tools.software_rendering import MAX_ELEVATION
 from .tools.validation import tally_failure
 
@@ -126,12 +137,12 @@ CritiqueInstructionsRounds = Annotated[
 @knowledge_app.command(name="search")
 def knowledge_search(
     query: Annotated[
-        str, typer.Argument(help="build task, part ID, or diagnostic code")
+        list[str], typer.Argument(help="build task, part ID, or diagnostic code")
     ],
     limit: Annotated[int, typer.Option(min=1, help="maximum number of entries")] = 3,
 ) -> None:
     """Find applicable building guides and print their summaries as JSON."""
-    print(search_knowledge(query, limit=limit).model_dump_json(indent=2))
+    print(search_knowledge(" ".join(query), limit=limit).model_dump_json(indent=2))
 
 
 @knowledge_app.command(name="show")
@@ -184,26 +195,41 @@ def init(
     task_json: TaskJSON = None,
     review_rounds: ReviewRounds = 2,
 ) -> None:
-    """Initialize a new record.
+    """Initialize a new record and print its ID, build.py path and next step."""
+    from .flow.artifacts import write_drafts
+    from .flow.guide import flow_next, repair_action
 
-    Prints the new record's id and path to the build.py file to be edited.
-    An external agent should edit the build.py file directly, then run
-    ``brickwright external validate <record_id>`` to validate it.
-    """
-    config = Config(
-        records_dir=records_dir,
-        flow=flow,
-        flow_review_rounds=review_rounds,
-    )
-    rec = _create_record(
-        config,
-        prompt=prompt,
-        image=image,
-        from_id=from_id,
-        task_json=task_json,
-    )
-    print(f"record_id={rec.id}")
-    print(f"build_path={rec.build_path.absolute()}")
+    call = Invocation(records_dir=records_dir, command="init")
+    with _flow_errors(call):
+        if not prompt and image is None and from_id is None:
+            raise FlowError(
+                "Provide a prompt, --image, or --from.", code="flow.invalid_input"
+            )
+        config = Config(
+            records_dir=records_dir, flow=flow, flow_review_rounds=review_rounds
+        )
+        rec = Record.create(
+            config,
+            prompt=prompt or "",
+            image=image,
+            from_id=from_id,
+            task_path=task_json,
+        )
+        call = call.model_copy(update={"record_id": rec.id})
+        if rec.read_meta().flow:
+            write_drafts(rec)
+            step = flow_next(rec)
+        else:
+            step = repair_action(rec, "Write the model in build.py.")
+        _emit(
+            call,
+            {
+                "ok": True,
+                "record_id": rec.id,
+                "build_path": str(rec.build_path.absolute()),
+            },
+            step=step,
+        )
 
 
 @external_app.command()
@@ -220,30 +246,36 @@ def validate(
     max_validations: MaxValidations = _DEFAULTS.max_validations,
 ) -> None:
     """Verify a record's correctness."""
-    config = Config(
-        records_dir=records_dir,
-        build_timeout=timeout,
-        max_validations=max_validations,
-    )
-    rec = Record.load(config, record_id)
-
-    validations = rec.read_meta().validations
-    # Each call is one validation; refuse once the budget is spent.
-    if config.max_validations and validations >= config.max_validations:
-        typer.echo(
-            f"validation budget of {config.max_validations} reached; stop validating",
-            err=True,
+    call = Invocation(records_dir=records_dir, record_id=record_id, command="validate")
+    with _flow_errors(call):
+        config = Config(
+            records_dir=records_dir,
+            build_timeout=timeout,
+            max_validations=max_validations,
         )
-        raise typer.Exit(1)
-    with _track_command(rec, "validate"):
-        report = validate_record(rec, config)
-    failures = rec.read_meta().validation_failures or ValidationFailures()
-    rec.update_meta(
-        validations=validations + 1,
-        validation_failures=tally_failure(failures, report),
-    )
-
-    _print_report(report)
+        rec = Record.load(config, record_id)
+        validations = rec.read_meta().validations
+        # Each call is one validation; refuse once the budget is spent.
+        if config.max_validations and validations >= config.max_validations:
+            raise FlowError(
+                f"The validation budget of {config.max_validations} calls is spent. "
+                "Stop validating.",
+                code="validate.budget_exhausted",
+                extra={"next": None},
+            )
+        with _track_command(rec, "validate"):
+            report = validate_record(rec, config)
+        failures = rec.read_meta().validation_failures or ValidationFailures()
+        rec.update_meta(
+            validations=validations + 1,
+            validation_failures=tally_failure(failures, report),
+        )
+        _emit(
+            call,
+            json.loads(report.agent_json()),
+            ok=report.ok,
+            step=_after_build(rec, report.ok, report.diagnostics),
+        )
 
 
 @external_app.command()
@@ -259,11 +291,13 @@ def explore(
     timeout: BuildTimeout = _DEFAULTS.build_timeout,
 ) -> None:
     """Inspect the catalog or the record's build and print its JSON result."""
-    config = Config(records_dir=records_dir, build_timeout=timeout)
-    record = Record.load(config, record_id)
-    with _track_command(record, "explore"):
-        result = explore_record(record, code, config)
-    _print_report(result)
+    call = Invocation(records_dir=records_dir, record_id=record_id, command="explore")
+    with _flow_errors(call):
+        config = Config(records_dir=records_dir, build_timeout=timeout)
+        record = Record.load(config, record_id)
+        with _track_command(record, "explore"):
+            result = explore_record(record, code, config)
+        _emit(call, result.model_dump(mode="json"), ok=result.ok, step=None)
 
 
 @external_app.command()
@@ -278,21 +312,25 @@ def finalize(
     The finished build is compiled into an LDraw file and, when a parts library
     is available, rendered to a multi-view PNG.
     """
-    config = Config(records_dir=records_dir, render_timeout=timeout)
-    rec = Record.load(config, record_id)
-
-    with _track_command(rec, "finalize"):
-        report = finalize_record(rec, config)
-
-    # Record the elapsed time since the record was created.
-    meta = rec.read_meta()
-    created = meta.created
-    if created is not None:
-        timing = meta.timing or Timing()
-        total = round((datetime.now(created.tzinfo) - created).total_seconds(), 3)
-        rec.update_meta(timing=timing.model_copy(update={"total": total}))
-
-    _print_report(report)
+    call = Invocation(records_dir=records_dir, record_id=record_id, command="finalize")
+    with _flow_errors(call):
+        config = Config(records_dir=records_dir, render_timeout=timeout)
+        rec = Record.load(config, record_id)
+        with _track_command(rec, "finalize"):
+            report = finalize_record(rec, config)
+        # Record the elapsed time since the record was created.
+        meta = rec.read_meta()
+        created = meta.created
+        if created is not None:
+            timing = meta.timing or Timing()
+            total = round((datetime.now(created.tzinfo) - created).total_seconds(), 3)
+            rec.update_meta(timing=timing.model_copy(update={"total": total}))
+        _emit(
+            call,
+            json.loads(report.agent_json()),
+            ok=report.ok,
+            step=_after_build(rec, report.ok, report.diagnostics),
+        )
 
 
 @external_app.command()
@@ -302,17 +340,41 @@ def verify_delivery(
     records_dir: RecordsDir = Path(DEFAULT_RECORDS_DIR),
 ) -> None:
     """Check that an MPD is byte-identical to the current finalized flow snapshot."""
+    from .flow.guide import flow_next
     from .tools import finalization
 
-    try:
+    call = Invocation(
+        records_dir=records_dir, record_id=record_id, command="verify-delivery"
+    )
+    with _flow_errors(call):
         record = _record(record_id, records_dir)
-    except OSError as exc:
-        report = finalization.DeliveryVerification(ok=False, error=str(exc))
-    else:
         report = finalization.verify_delivery(record, file)
-    _print_json(report.model_dump(mode="json"))
-    if not report.ok:
-        raise typer.Exit(1)
+        result = report.model_dump(mode="json")
+        if report.ok:
+            _emit(call, result, step=None)
+            return
+        assert report.error is not None and report.code is not None
+        result["diagnostics"] = [
+            Diagnostic(
+                code=report.code, stage="delivery", message=report.error
+            ).model_dump(mode="json")
+        ]
+        if report.code in ("delivery.mismatch", "delivery.missing_file"):
+            step = provide(
+                f"Copy {record.ldr_path.resolve()} byte for byte to {file.absolute()}, "
+                "then verify it again.",
+                run(
+                    "Verify the submitted file against the finalized snapshot.",
+                    "external",
+                    "verify-delivery",
+                    RECORD,
+                    str(file.absolute()),
+                ),
+                path=file.absolute(),
+            )
+        else:
+            step = flow_next(record)
+        _emit(call, result, ok=False, step=step)
 
 
 @external_app.command()
@@ -324,23 +386,33 @@ def render(
         Path | None, typer.Option(help="render the frozen MPD at these task cameras")
     ] = None,
 ) -> None:
-    """Render a record's current build to a multi-view image.
+    """Render a record's current build.
 
-    Writes ``out/build.png`` and prints its path. Open that file to see how the
-    build currently looks (front, side, top, and isometric views).
+    Without ``--cameras``, writes the multi-view preview ``out/build.png``.
+    With ``--cameras``, renders the checked snapshot at each task camera.
     """
-    config = Config(records_dir=records_dir, render_timeout=timeout)
-    rec = Record.load(config, record_id)
+    from .flow.guide import flow_next
 
-    if cameras is not None:
-        from .aligned_review import render_cameras
+    call = Invocation(records_dir=records_dir, record_id=record_id, command="render")
+    with _flow_errors(call):
+        config = Config(records_dir=records_dir, render_timeout=timeout)
+        rec = Record.load(config, record_id)
+        flow = rec.read_meta().flow is not None
+        if cameras is not None:
+            from .aligned_review import render_cameras
 
-        with _flow_errors(), _track_command(rec, "render"):
-            _print_json(render_cameras(rec, cameras, config))
-        return
-    with _track_command(rec, "render"):
-        report = render_record(rec, config)
-    _print_image_and_report(report)
+            with _track_command(rec, "render"):
+                result = render_cameras(rec, cameras, config)
+            _emit(call, {"ok": True, **result}, step=flow_next(rec) if flow else None)
+            return
+        with _track_command(rec, "render"):
+            report = render_record(rec, config)
+        _emit(
+            call,
+            report.model_dump(mode="json"),
+            ok=report.ok,
+            step=flow_next(rec) if flow and report.ok else None,
+        )
 
 
 @external_app.command(name="render-angle")
@@ -354,14 +426,17 @@ def render_angle(
 ) -> None:
     """Render the current build from a single camera angle.
 
-    Writes the image (default: the record's ``out/viewpoint.png``) and prints its path.
+    Writes the image (default: the record's ``out/viewpoint.png``) and reports its path.
     """
-    config = Config(records_dir=records_dir, render_timeout=timeout)
-    rec = Record.load(config, record_id)
-
-    with _track_command(rec, "render-angle"):
-        report = render_angle_record(rec, azimuth, elevation, config, out_path=out)
-    _print_image_and_report(report)
+    call = Invocation(
+        records_dir=records_dir, record_id=record_id, command="render-angle"
+    )
+    with _flow_errors(call):
+        config = Config(records_dir=records_dir, render_timeout=timeout)
+        rec = Record.load(config, record_id)
+        with _track_command(rec, "render-angle"):
+            report = render_angle_record(rec, azimuth, elevation, config, out_path=out)
+        _emit(call, report.model_dump(mode="json"), ok=report.ok, step=None)
 
 
 @external_app.command(name="critique-instructions")
@@ -379,32 +454,171 @@ def critique_instructions(
         raise typer.Exit(1) from exc
 
 
+def _after_build(rec: Record, ok: bool, diagnostics: list[Diagnostic]) -> Action | None:
+    """The next step after validating or finalizing a record."""
+    from .flow.guide import flow_next, repair_action
+
+    if rec.read_meta().flow is not None:
+        return flow_next(rec)
+    if ok:
+        return flow_next(rec)
+    first = next(iter(diagnostics), None)
+    summary = (
+        (first.next_action or first.message)
+        if first is not None
+        else "Fix the reported problems in build.py."
+    )
+    return repair_action(rec, summary)
+
+
 @contextmanager
-def _flow_errors() -> Generator[None]:
-    """Return machine-readable input errors to the external agent."""
-    from bricklayer.diagnostics import DiagnosticError
-
-    from .tools.diagnostics import exception_diagnostic
-
+def _flow_errors(call: Invocation) -> Generator[None]:
+    """Report any workflow failure as one JSON result with a next step."""
     try:
         yield
-    except (ValueError, OSError, RuntimeError, DiagnosticError) as exc:
-        issue = exception_diagnostic(exc, "flow", code="flow.invalid_input")
-        print(
-            json.dumps(
-                {"error": str(exc), "diagnostics": [issue.model_dump(mode="json")]},
-                ensure_ascii=False,
-            )
-        )
+    except typer.Exit:
+        raise
+    except (ValueError, OSError, RuntimeError) as exc:
+        _emit_error(call, exc)
         raise typer.Exit(1) from exc
 
 
-def _print_json(result: dict[str, Any]) -> None:
-    print(json.dumps(result, ensure_ascii=False, indent=2))
+def _emit_error(call: Invocation, exc: Exception) -> None:
+    from pydantic import ValidationError
+
+    from .actions import validation_errors, validation_message
+    from .tools.diagnostics import exception_diagnostic
+
+    extra = dict(getattr(exc, "extra", {}) or {})
+    if isinstance(exc, RecordNotFound):
+        issue = Diagnostic(
+            code="record.not_found",
+            stage="flow",
+            message=f"{exc}. Pass --records-dir or set {RECORDS_DIR_ENV} to the "
+            "directory that holds the record.",
+            evidence={
+                "record_id": exc.record_id,
+                "records_dir": str(Path(exc.records_dir).absolute()),
+            },
+            action=run("List the records in this directory.", "ls"),
+        )
+    elif isinstance(exc, ValidationError):
+        errors = validation_errors(exc)
+        issue = Diagnostic(
+            code="flow.invalid_input",
+            stage="flow",
+            message=validation_message(exc.title, errors),
+            evidence={"errors": errors},
+        )
+    else:
+        issue = exception_diagnostic(exc, "flow", code="flow.invalid_input")
+    if "next" in extra:
+        step = extra.pop("next")
+    elif issue.action is not None:
+        step = issue.action
+    else:
+        step = _fallback_step(call)
+    result = {"ok": False, "error": issue.message, **extra}
+    result["diagnostics"] = [issue.model_dump(mode="json")]
+    _emit(call, result, ok=False, step=step)
+
+
+def _fallback_step(call: Invocation) -> Action | None:
+    """Use the record's current next step when the error names none."""
+    from .flow.guide import flow_next
+
+    if call.record_id is None or call.command == "status":
+        return None
+    try:
+        return flow_next(_record(call.record_id, call.records_dir))
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+
+
+def _resolve_tree(value: Any, call: Invocation) -> Any:
+    """Resolve each diagnostic's action and drop text repeated in its evidence."""
+    if isinstance(value, list):
+        return [_resolve_tree(item, call) for item in value]
+    if not isinstance(value, dict):
+        return value
+    value = dict(value)
+    evidence = value.get("evidence")
+    if (
+        "code" in value
+        and isinstance(evidence, dict)
+        and evidence.get("exception_message") == value.get("message")
+    ):
+        value["evidence"] = {
+            key: item for key, item in evidence.items() if key != "exception_message"
+        }
+    action = value.get("action")
+    if "code" in value and isinstance(action, dict):
+        resolved = call.resolve(Action.model_validate(action))
+        value["action"] = resolved.model_dump(mode="json")
+        value["next_action"] = describe(resolved)
+        return {
+            key: item if key in ("action", "next_action") else _resolve_tree(item, call)
+            for key, item in value.items()
+        }
+    return {key: _resolve_tree(item, call) for key, item in value.items()}
+
+
+def _emit(
+    call: Invocation,
+    result: dict[str, Any],
+    *,
+    ok: bool | None = None,
+    step: Action | None = None,
+) -> None:
+    """Print one JSON result with ``ok`` and ``next``; exit 1 when not ok."""
+    data = _resolve_tree(result, call)
+    data["ok"] = data.get("ok", True) if ok is None else ok
+    if step is None and not data["ok"]:
+        step = next(
+            (
+                Action.model_validate(issue["action"])
+                for issue in data.get("diagnostics") or []
+                if isinstance(issue, dict) and isinstance(issue.get("action"), dict)
+            ),
+            None,
+        )
+    data["next"] = (
+        call.resolve(step).model_dump(mode="json") if step is not None else None
+    )
+    print(json.dumps(data, ensure_ascii=False, indent=2))
+    if not data["ok"]:
+        raise typer.Exit(1)
 
 
 def _record(record_id: str, records_dir: Path) -> Record:
     return Record.load(Config(records_dir=records_dir), record_id)
+
+
+def _read_json(path: Path, name: str) -> dict:
+    retry = edit(
+        f"Write valid JSON in the {name} file and submit it again.",
+        FILE,
+        run(f"Submit the {name}.", "external", name, RECORD, "--set", FILE),
+    )
+    try:
+        data = json.loads(path.read_bytes())
+    except FileNotFoundError:
+        raise FlowError(
+            f"The {name} file {path} does not exist.",
+            code=f"flow.{name}",
+            action=retry,
+        ) from None
+    except (ValueError, UnicodeError) as exc:
+        raise FlowError(
+            f"Invalid JSON in {path}: {exc}", code=f"flow.{name}", action=retry
+        ) from None
+    if not isinstance(data, dict):
+        raise FlowError(
+            f"The {name} file must hold one JSON object.",
+            code=f"flow.{name}",
+            action=retry,
+        )
+    return data
 
 
 def _artifact(
@@ -416,23 +630,59 @@ def _artifact(
     from .aligned_review import submit_review
     from .flow import read_artifact, set_artifact
 
-    with _flow_errors():
+    call = Invocation(
+        records_dir=records_dir, record_id=record_id, file=path, command=name
+    )
+    with _flow_errors(call):
         record = _record(record_id, records_dir)
         if path is None:
             result = read_artifact(record, name)
+            _emit(call, result, ok=not result.get("diagnostics"), step=None)
         elif name == "review":
-            result = submit_review(record, path)
+            _emit_review(call, record, submit_review(record, path))
         else:
-            try:
-                data = json.loads(path.read_bytes())
-            except (ValueError, UnicodeError) as exc:
-                raise ValueError(f"Invalid JSON in {path}: {exc}") from exc
-            if not isinstance(data, dict):
-                raise ValueError("Expected a JSON object.")
-            result = set_artifact(record, name, data)
-        _print_json(result)
-        if result.get("diagnostics") or result.get("ok") is False:
-            raise typer.Exit(1)
+            from .flow.guide import flow_next
+
+            result = set_artifact(record, name, _read_json(path, name))
+            result.pop("schema", None)
+            if result.get("diagnostics"):
+                result.pop("content", None)
+                _emit(call, result, ok=False)
+            else:
+                _emit(call, result, step=flow_next(record))
+
+
+def _emit_review(call: Invocation, record: Record, receipt: dict) -> None:
+    from .aligned_review import _new_round_action
+    from .flow import flow_status
+    from .flow.guide import flow_next
+
+    state = flow_status(record)
+    budget = record.read_meta().flow_review_rounds
+    used = state["review"]["rounds"]
+    status = receipt["status"]
+    result = {key: value for key, value in receipt.items() if key != "report"}
+    result.update(
+        receipt=status,
+        counted=status == "accepted",
+        rounds={"used": used, "budget": budget, "remaining": max(budget - used, 0)},
+        deliverable=bool(state["ready"]),
+    )
+    if status == "failed":
+        _emit(call, result, step=_new_round_action())
+    elif status == "stale":
+        result["error"] = (
+            "The report was archived as stale: the snapshot or its evidence changed "
+            "after this round was prepared. It does not count as a review round."
+        )
+        result["diagnostics"] = [
+            Diagnostic(
+                code="review.round_stale", stage="review", message=result["error"]
+            ).model_dump(mode="json")
+        ]
+        _emit(call, result, ok=False, step=flow_next(record, state))
+    else:
+        _emit(call, result, step=flow_next(record, state))
 
 
 @external_app.command()
@@ -469,11 +719,15 @@ def review(
 def status(
     record_id: RecordId, records_dir: RecordsDir = Path(DEFAULT_RECORDS_DIR)
 ) -> None:
-    """Show current snapshot, release gates and next actions."""
+    """Show the current snapshot, every release gate and the one next step."""
     from .flow import flow_status
+    from .flow.guide import flow_next
 
-    with _flow_errors():
-        _print_json(flow_status(_record(record_id, records_dir)))
+    call = Invocation(records_dir=records_dir, record_id=record_id, command="status")
+    with _flow_errors(call):
+        record = _record(record_id, records_dir)
+        state = flow_status(record)
+        _emit(call, {"ok": True, **state}, step=flow_next(record, state))
 
 
 @external_app.command()
@@ -482,11 +736,15 @@ def compare(
     reference_dir: Annotated[Path, typer.Option()],
     records_dir: RecordsDir = Path(DEFAULT_RECORDS_DIR),
 ) -> None:
-    """Compare each fixed-camera view against the same named reference image."""
+    """Compare each fixed-camera view with goal-<camera>.png in the reference directory."""
     from .aligned_review import compare_record
+    from .flow.guide import flow_next
 
-    with _flow_errors():
-        _print_json(compare_record(_record(record_id, records_dir), reference_dir))
+    call = Invocation(records_dir=records_dir, record_id=record_id, command="compare")
+    with _flow_errors(call):
+        record = _record(record_id, records_dir)
+        result = compare_record(record, reference_dir)
+        _emit(call, {"ok": True, **result}, step=flow_next(record))
 
 
 @external_app.command(name="review-instructions")
@@ -501,23 +759,27 @@ def aligned_instructions(
         float | None, typer.Option(help="externally matched vertical angle")
     ] = None,
 ) -> None:
-    """Freeze the inputs and print the instructions for a visual review."""
-    from .aligned_review import review_instructions
+    """Freeze a review round and report its packet, report template and instructions."""
+    from .aligned_review import prepare_review
 
-    with _flow_errors():
+    call = Invocation(
+        records_dir=records_dir, record_id=record_id, command="review-instructions"
+    )
+    with _flow_errors(call):
         if (azimuth is None) != (elevation is None):
-            raise ValueError("Pass both --azimuth and --elevation for a matched view.")
-        record = _record(record_id, records_dir)
-        if azimuth is None or elevation is None:
-            print(review_instructions(record, parent_session_id=parent_session_id))
-        else:
-            print(
-                review_instructions(
-                    record,
-                    parent_session_id=parent_session_id,
-                    matched_angle=(azimuth, elevation),
-                )
+            raise FlowError(
+                "Pass both --azimuth and --elevation for a matched view.",
+                code="flow.invalid_input",
             )
+        record = _record(record_id, records_dir)
+        angle = None if azimuth is None or elevation is None else (azimuth, elevation)
+        prepared = prepare_review(
+            record, parent_session_id=parent_session_id, matched_angle=angle
+        )
+        step = prepared.pop("next")
+        if prepared["mode"] == "review":
+            prepared.pop("instructions")
+        _emit(call, {"ok": True, **prepared}, step=step)
 
 
 @module_app.command(name="init")
@@ -529,10 +791,24 @@ def module_init(
     """Create a child record in the parent's module coordinate system."""
     from .modules import init_module
 
-    with _flow_errors():
+    call = Invocation(records_dir=records_dir, record_id=record_id, command="module")
+    with _flow_errors(call):
         child = init_module(_record(record_id, records_dir), module_id)
-        print(f"record_id={child.path.relative_to(records_dir)}")
-        print(f"build_path={child.build_path.absolute()}")
+        child_id = str(child.path.relative_to(records_dir))
+        step = edit(
+            "Build the module in its build.py, then validate it.",
+            child.build_path.absolute(),
+            run("Validate the module.", "external", "validate", child_id),
+        )
+        _emit(
+            call,
+            {
+                "ok": True,
+                "record_id": child_id,
+                "build_path": str(child.build_path.absolute()),
+            },
+            step=step,
+        )
 
 
 @module_app.command(name="status")
@@ -542,8 +818,9 @@ def module_status_command(
     """List child records, interface checks and stale contracts."""
     from .modules import module_status
 
-    with _flow_errors():
-        _print_json(module_status(_record(record_id, records_dir)))
+    call = Invocation(records_dir=records_dir, record_id=record_id, command="module")
+    with _flow_errors(call):
+        _emit(call, {"ok": True, **module_status(_record(record_id, records_dir))})
 
 
 @module_app.command(name="instructions")
@@ -555,10 +832,12 @@ def module_instruction_command(
     """Show the module contract and record a builder session when supplied."""
     from .modules import module_instructions
 
-    with _flow_errors():
-        print(
-            module_instructions(_record(record_id, records_dir), session_id=session_id)
+    call = Invocation(records_dir=records_dir, record_id=record_id, command="module")
+    with _flow_errors(call):
+        text = module_instructions(
+            _record(record_id, records_dir), session_id=session_id
         )
+        _emit(call, {"ok": True, "instructions": text})
 
 
 @module_app.command(name="finish")
@@ -570,8 +849,10 @@ def module_finish(
     """Record the end of the independent module session."""
     from .modules import finish_module_session
 
-    with _flow_errors():
-        _print_json(finish_module_session(_record(record_id, records_dir), session_id))
+    call = Invocation(records_dir=records_dir, record_id=record_id, command="module")
+    with _flow_errors(call):
+        result = finish_module_session(_record(record_id, records_dir), session_id)
+        _emit(call, {"ok": True, **result})
 
 
 @module_app.command(name="merge")
@@ -581,31 +862,12 @@ def module_merge(
     """Select and freeze all checked module snapshots for the parent."""
     from .modules import prepare_merge
 
-    with _flow_errors():
+    call = Invocation(records_dir=records_dir, record_id=record_id, command="module")
+    with _flow_errors(call):
         merge = prepare_merge(_record(record_id, records_dir))
         if merge is None:
-            raise ValueError("The plan contains no modules.")
-        _print_json({"manifest_sha256": merge.manifest_sha256})
-
-
-def _create_record(
-    config: Config,
-    *,
-    prompt: str | None,
-    image: Path | None,
-    from_id: str | None,
-    task_json: Path | None = None,
-) -> Record:
-    if not prompt and image is None and from_id is None:
-        raise typer.BadParameter("provide a prompt, --image, or --from")
-    with _flow_errors():
-        return Record.create(
-            config,
-            prompt=prompt or "",
-            image=image,
-            from_id=from_id,
-            task_path=task_json,
-        )
+            raise FlowError("The plan contains no modules.", code="flow.invalid_input")
+        _emit(call, {"ok": True, "manifest_sha256": merge.manifest_sha256})
 
 
 @contextmanager
@@ -629,27 +891,37 @@ def _track_command(rec: Record, name: str) -> Generator[None]:
         )
 
 
-def _print_image_and_report(report: RenderReport) -> None:
-    """Print the rendered image's path (when there is one), then the report."""
-    if report.ok and report.image_path is not None:
-        print(str(report.image_path.absolute()))
-    _print_report(report)
-
-
-def _print_report(
-    report: ValidationReport | FinalizationReport | RenderReport | SnippetResult,
-) -> None:
-    """Print the report as JSON and exit nonzero if the operation failed."""
-    if isinstance(report, (ValidationReport, FinalizationReport)):
-        print(report.agent_json(indent=2))
-    else:
-        print(report.model_dump_json(indent=2))
-    if not report.ok:
-        raise typer.Exit(1)
-
-
 def main(argv: list[str] | None = None) -> None:
-    app(args=argv)
+    """Run the CLI; usage errors also print one JSON result."""
+    import sys
+
+    import click
+
+    try:
+        code = app(args=argv, standalone_mode=False)
+    except click.ClickException as exc:
+        context = getattr(exc, "ctx", None)
+        step = None
+        if context is not None:
+            path = context.command_path.split()[1:]
+            step = run("Read this command's arguments.", *path, "--help")
+        issue = Diagnostic(code="cli.usage", stage="cli", message=exc.format_message())
+        payload = {
+            "ok": False,
+            "error": issue.message,
+            "diagnostics": [issue.model_dump(mode="json")],
+            "next": None
+            if step is None
+            else Invocation(records_dir=Path(DEFAULT_RECORDS_DIR))
+            .resolve(step)
+            .model_dump(mode="json"),
+        }
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+        sys.exit(1)
+    except click.exceptions.Abort:
+        sys.exit(1)
+    if isinstance(code, int) and code:
+        sys.exit(code)
 
 
 if __name__ == "__main__":

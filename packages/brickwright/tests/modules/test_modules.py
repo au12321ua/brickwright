@@ -262,9 +262,14 @@ def test_external_module_session_hands_back_child_snapshot(
         return result.stdout
 
     child_ref = parent.id + "/modules/lower"
-    assert f"record_id={child_ref}" in invoke("module", "init", parent.id, "lower")
-    assert "local" in invoke(
-        "module", "instructions", child_ref, "--session-id", "worker"
+    created = json.loads(invoke("module", "init", parent.id, "lower"))
+    assert created["record_id"] == child_ref
+    assert created["next"]["then"]["argv"][4:6] == ["validate", child_ref]
+    assert (
+        "local"
+        in json.loads(
+            invoke("module", "instructions", child_ref, "--session-id", "worker")
+        )["instructions"]
     )
     child = Record.load(config, child_ref)
     child.write_build(

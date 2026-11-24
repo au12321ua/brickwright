@@ -1,5 +1,6 @@
 """Check the copyable skill and the paths builders get from knowledge search."""
 
+import json
 import re
 import sys
 from pathlib import Path
@@ -79,7 +80,7 @@ def test_skill_quick_start_creates_and_exports_a_valid_record(tmp_path):
         ["external", "init", "Stack two 2 x 4 bricks", "--records-dir", str(records)],
     )
     assert init.exit_code == 0, init.output
-    record = dict(line.split("=", 1) for line in init.stdout.splitlines())
+    record = json.loads(init.stdout)
     build = Path(record["build_path"])
     build.write_text(starter, encoding="utf-8")
     for command in ("validate", "finalize"):

@@ -1,5 +1,6 @@
 """Tests for the brickwright CLI."""
 
+import json
 import re
 from pathlib import Path
 from types import SimpleNamespace
@@ -36,8 +37,8 @@ def ext(*argv):
 
 
 def _init_fields(out: str) -> dict[str, str]:
-    """Parse init's ``key=value`` output lines into a dict."""
-    return dict(line.split("=", 1) for line in out.splitlines())
+    """Parse init's JSON result."""
+    return json.loads(out)
 
 
 def _init(rd: str, *extra) -> str:
@@ -111,14 +112,20 @@ class TestLs:
 
 class TestInit:
     def test_prints_record_id_and_build_path(self, rd):
-        # init prints labeled "record_id=" and "build_path=" lines, so an
-        # external agent can edit that build.py directly (no read/write/edit).
+        # init prints one JSON result naming build.py, so an external agent can
+        # edit it directly, and points the next step at that file.
         result = ext("init", "a tower", "--records-dir", rd)
         assert result.exit_code == 0
-        lines = result.stdout.splitlines()
-        assert lines[0].startswith("record_id=")
-        assert lines[1].startswith("build_path=")
         fields = _init_fields(result.stdout)
+        assert fields["ok"] is True
+        assert fields["next"]["kind"] == "edit"
+        assert fields["next"]["path"] == fields["build_path"]
+        assert fields["next"]["then"]["argv"][-4:] == [
+            "validate",
+            fields["record_id"],
+            "--records-dir",
+            str(Path(rd).absolute()),
+        ]
         path = Path(fields["build_path"])
         assert path == _record(rd, fields["record_id"]).build_path
         assert path.is_file()
@@ -143,8 +150,10 @@ class TestInit:
     def test_rejects_missing_prompt_image_and_from(self, rd):
         # init needs at least one of: a prompt, --image, or --from.
         result = ext("init", "--records-dir", rd)
-        assert result.exit_code != 0
-        assert "provide a prompt" in result.output
+        assert result.exit_code == 1
+        payload = json.loads(result.stdout)
+        assert payload["ok"] is False
+        assert "Provide a prompt" in payload["error"]
 
     def test_from_clones_an_existing_record(self, rd):
         source = _init(rd)
@@ -234,8 +243,10 @@ class TestValidate:
         assert validate().exit_code == 0
         assert validate().exit_code == 0
         refused = validate()
-        assert refused.exit_code != 0
-        assert "budget" in refused.stderr
+        assert refused.exit_code == 1
+        payload = json.loads(refused.stdout)
+        assert payload["diagnostics"][0]["code"] == "validate.budget_exhausted"
+        assert payload["next"] is None
         assert _meta(rd, record_id).validations == 2  # the refused call didn't count
 
     def test_validate_tracks_a_build_error_by_type(self, rd, raising_build):
