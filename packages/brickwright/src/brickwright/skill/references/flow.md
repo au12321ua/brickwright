@@ -6,14 +6,16 @@ or pass `--records-dir DIR` when the task specifies one.
 
 ```sh
 brickwright external init "Task prompt" --flow --task-json task.json --image target.png
-brickwright external features ID
-brickwright external plan ID
 ```
 
-Use `--image` when the task supplies a main target image. The last two commands
-show the JSON schemas. Submit a feature checklist and plan
-with `features ID --set features.json` and `plan ID --set plan.json`. Preserve the
-original check IDs. For additional visible features, cite a view and region.
+Use `--image` when the task supplies a main target image. The record starts with
+feature and plan drafts under `drafts/`; the feature draft lists one entry per
+original check. Each result's `next` step names the draft to fill and the command
+that submits it. `brickwright external features ID` and `plan ID` show the JSON
+schemas. Every later step follows the same pattern: take `next` from the result,
+and use `brickwright external status ID` to see every open gate.
+
+Preserve the original check IDs. For additional visible features, cite a view and region.
 Declare the scale, palette, intended separate objects, and any allowed decorative
 simplification before building. If the design needs contracted modules, use the
 [module workflow](modules.md).

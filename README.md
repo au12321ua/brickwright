@@ -24,7 +24,7 @@ uv run brickwright skill install --target .claude/skills/brickwright
 
 > 用 BrickWright 把一块蓝色 2×4 砖叠在一块红色 2×4 砖上。检查它们是否连在一起，完成后给我模型文件的路径。
 
-代理会创建搭建记录，在其中编辑 `build.py`，运行 `validate` 和 `finalize`。默认成品在 `records/<record_id>/out/build.ldr`。需要渲染预览时，将 `LDRAW_LIBRARY_PATH` 指向本地 LDraw 零件库目录。
+代理会创建搭建记录，在其中编辑 `build.py`，运行 `validate` 和 `finalize`。每条命令输出一个 JSON，代理按其中的 `next` 推进或修复。默认成品在 `records/<record_id>/out/build.ldr`。需要渲染预览时，将 `LDRAW_LIBRARY_PATH` 指向本地 LDraw 零件库目录。
 
 ## 运行带参考图的 demo
 

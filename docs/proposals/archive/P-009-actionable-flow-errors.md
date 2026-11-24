@@ -1,6 +1,6 @@
 # P-009 — 流程命令的可执行恢复
 
-Status: accepted
+Status: completed
 
 ## 问题与目标
 
@@ -108,3 +108,15 @@ worker 捕获普通异常，把原因码、阶段、异常类型和消息交回�
 - **形状。** 无效的 `features`、`plan` 和 `review --set` 只输出一个 JSON，不附完整 schema。对缺记录的 `validate` 和 `render`，stdout 输出信封，stderr 中没有 traceback。worker 异常的类型和消息出现在报告中。`compare` 在零件库不可用时仍能对比已渲染的图。
 - **评审分层。** `accepted`、`stale`、`failed` 三种回执的退出码、轮数计入和 `deliverable` 符合上文。`review ID` 的 schema 能通过一份合格的普通报告。
 - 运行 CI 的全部检查。
+
+## 实施结果
+
+`external` 命令统一输出单个 JSON 信封，带 `ok` 和一个首选的 `next`，退出码为 0 或 1。动作在 CLI 边界解析，使用本次调用的解释器、记录目录的绝对路径和实际提交的文件。`status` 与各命令的兜底共用同一套首选动作规则。实施中发现并修正了一处流程缺口：`build.py` 仍是模板时，原先会直接建议验证，现在先要求写模型。`init` 改为返回 JSON，并为流程记录写出特征和规划草稿。评审轮次附带报告模板和说明文件，回执结果分为三层。worker 异常的类型和消息会交回父进程。skill 增加了按 `next` 推进的恢复规则和两条返工路径。[CLI 结果与下一步](../../design/validation-and-export.md#cli-结果与下一步)
+
+- **端到端恢复**：进程内测试按提案的主验收执行，全程只依据 `next` 推进，结果为 [恢复回归](../../../packages/brickwright/tests/test_recovery.py)。另用真实子进程、本地 LDraw 库和 R-31039 原题输入跑了同一流程：漏填 C03 后依据 `missing` 证据补回，同一轮被采纳；如实判“需要修改”后返工一次；两轮用尽后定稿，交付核对通过。
+- **演示镜像**：用新 wheel 重建镜像后，在容器内用 `/opt/brickwright` 的解释器跑了同一个脚本。另起容器执行原题评分，交付有效，`native_finalization` 为 `pass`。
+- **缺 LDraw 库**：真实子进程中返回 `render.ldraw_missing`，并给出补齐后可直接执行的渲染命令，stderr 为空。
+- **CI**：工作区 pytest 通过 2,752 项、跳过 7 项，Ruff 检查、格式检查和 ty 均通过。
+
+真实宿主代理实测仍按 U-13 留到开发完成后。
+
