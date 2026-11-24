@@ -1,6 +1,6 @@
 # P-009 — 流程命令的可执行恢复
 
-Status: draft
+Status: accepted
 
 ## 问题与目标
 
