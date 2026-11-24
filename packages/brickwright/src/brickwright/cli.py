@@ -551,16 +551,35 @@ def _resolve_tree(value: Any, call: Invocation) -> Any:
         value["evidence"] = {
             key: item for key, item in evidence.items() if key != "exception_message"
         }
+    if (
+        "code" in value
+        and isinstance(value.get("evidence"), dict)
+        and value["evidence"].get("exception_type") == "FlowError"
+    ):
+        value["evidence"] = {
+            key: item
+            for key, item in value["evidence"].items()
+            if key != "exception_type"
+        }
     action = value.get("action")
     if "code" in value and isinstance(action, dict):
         resolved = call.resolve(Action.model_validate(action))
-        value["action"] = resolved.model_dump(mode="json")
+        value["action"] = _action_json(resolved)
         value["next_action"] = describe(resolved)
         return {
             key: item if key in ("action", "next_action") else _resolve_tree(item, call)
             for key, item in value.items()
         }
     return {key: _resolve_tree(item, call) for key, item in value.items()}
+
+
+def _action_json(action: Action) -> dict[str, Any]:
+    """An action as hosts read it: resolved fields only, no internal arguments."""
+    data = action.model_dump(mode="json", exclude={"args", "then"}, exclude_none=True)
+    data = {key: value for key, value in data.items() if value != []}
+    if action.then is not None:
+        data["then"] = _action_json(action.then)
+    return data
 
 
 def _emit(
@@ -577,14 +596,21 @@ def _emit(
         step = next(
             (
                 Action.model_validate(issue["action"])
-                for issue in data.get("diagnostics") or []
+                for issue in result.get("diagnostics") or []
                 if isinstance(issue, dict) and isinstance(issue.get("action"), dict)
             ),
             None,
         )
-    data["next"] = (
-        call.resolve(step).model_dump(mode="json") if step is not None else None
-    )
+    data["next"] = _action_json(call.resolve(step)) if step is not None else None
+    for issue in data.get("diagnostics") or []:
+        # The chosen step appears once, as next; the diagnostic keeps its summary.
+        if (
+            data["next"] is not None
+            and isinstance(issue, dict)
+            and issue.get("action") == data["next"]
+        ):
+            issue["action"] = None
+            issue["next_action"] = data["next"]["summary"]
     print(json.dumps(data, ensure_ascii=False, indent=2))
     if not data["ok"]:
         raise typer.Exit(1)
@@ -895,11 +921,17 @@ def main(argv: list[str] | None = None) -> None:
     """Run the CLI; usage errors also print one JSON result."""
     import sys
 
-    import click
+    try:
+        from typer._click import ClickException
+    except ImportError:  # Typer releases that use Click directly
+        from click import ClickException
 
     try:
         code = app(args=argv, standalone_mode=False)
-    except click.ClickException as exc:
+    except ClickException as exc:
+        if type(exc).__name__ == "NoArgsIsHelpError":
+            exc.show()
+            sys.exit(2)
         context = getattr(exc, "ctx", None)
         step = None
         if context is not None:
@@ -918,7 +950,7 @@ def main(argv: list[str] | None = None) -> None:
         }
         print(json.dumps(payload, ensure_ascii=False, indent=2))
         sys.exit(1)
-    except click.exceptions.Abort:
+    except typer.Abort:
         sys.exit(1)
     if isinstance(code, int) and code:
         sys.exit(code)

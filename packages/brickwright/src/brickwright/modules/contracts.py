@@ -7,7 +7,7 @@ from hashlib import sha256
 from itertools import combinations
 from math import dist
 from pathlib import Path
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 import numpy as np
 from bricklayer.diagnostics import DiagnosticError
@@ -41,8 +41,16 @@ MATING_DEPTH_LDU = {"stud": 4.0, "open_stud": 4.0}
 class ModuleError(DiagnosticError):
     """A module operation that needs a source, contract, or snapshot correction."""
 
-    def __init__(self, message: str, *, code: str = "module.contract_stale", **kwargs):
+    def __init__(
+        self,
+        message: str,
+        *,
+        code: str = "module.contract_stale",
+        action: Any = None,
+        **kwargs,
+    ):
         super().__init__(message, code=code, **kwargs)
+        self.action = action
 
 
 class _Model(BaseModel):

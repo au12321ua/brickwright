@@ -10,6 +10,7 @@ from typing import Any
 
 from pydantic import BaseModel
 
+from ..actions import RECORD, run
 from ..config import Config
 from ..flow import flow_status
 from ..flow.artifacts import atomic_write
@@ -254,7 +255,8 @@ def _flow_changed(
                 code="flow.changed",
                 stage="finalize",
                 message=message,
-                next_action=f"brickwright external status {record.id}",
+                next_action="Check the record status and repeat the step it names.",
+                action=run("Check the record status.", "external", "status", RECORD),
             )
         ],
     )
