@@ -1,4 +1,4 @@
-"""The facts available to internal and external agents after execution failures."""
+"""The facts available from the workflow API and CLI after execution failures."""
 
 import json
 from hashlib import sha256
@@ -7,8 +7,7 @@ import pytest
 from typer.testing import CliRunner
 
 from brickwright.cli import app
-from brickwright.tools import rendering
-from brickwright.tools.registry import execute_tool
+from brickwright.tools import explore, finalize, rendering, validate
 from brickwright.tools.validation import ValidationReport
 
 
@@ -56,8 +55,7 @@ def test_execution_provenance_matches_cli(
     make_record, config, in_process, source, stage, code, line
 ):
     record = make_record(source)
-    tool = execute_tool(record, config, "validate", {})
-    payload = json.loads(tool.content)
+    payload = json.loads(validate(record, config).agent_json())
     cli = _external(record, config, "validate")
     assert cli["diagnostics"] == payload["diagnostics"]
     (issue,) = cli["diagnostics"]
@@ -77,51 +75,6 @@ def test_execution_provenance_matches_cli(
 
 
 @pytest.mark.parametrize(
-    "name,arguments,code,parameter",
-    [
-        ("write_build", {}, "tool.argument_missing", "content"),
-        (
-            "render",
-            {"azimuth": 0, "elevation": 100},
-            "tool.argument_out_of_range",
-            "elevation",
-        ),
-    ],
-)
-def test_parameter_diagnostics_show_the_failed_field(
-    record, config, name, arguments, code, parameter
-):
-    result = execute_tool(record, config, name, arguments)
-    (issue,) = json.loads(result.content)["diagnostics"]
-    assert issue["code"] == code
-    assert issue["stage"] == "tool_call"
-    assert issue["evidence"]["parameter"] == parameter
-
-
-def test_atomic_edit_conflict_keeps_the_nearest_match(record, config):
-    record.write_build("first_line = 1\nsecond_line = 2\n")
-    result = execute_tool(
-        record,
-        config,
-        "multi_edit_build",
-        {
-            "edits": [
-                {"old_str": "first_line = 1", "new_str": "first_line = 3"},
-                {"old_str": "second_line = 4", "new_str": "second_line = 5"},
-            ],
-        },
-    )
-    (issue,) = json.loads(result.content)["diagnostics"]
-    assert issue["code"] == "edit.no_match"
-    assert issue["stage"] == "edit"
-    assert issue["evidence"]["edit_index"] == 2
-    assert issue["evidence"]["applied_edits"] == 0
-    assert issue["evidence"]["closest_match"]["start_line"] == 2
-    assert "second_line = 2" in issue["evidence"]["closest_match"]["snippet"]
-    assert record.read_build() == "first_line = 1\nsecond_line = 2\n"
-
-
-@pytest.mark.parametrize(
     "snippet,file,line,stage",
     [
         ("\nraise ValueError('snippet problem')", "<explore>", 2, "explore"),
@@ -132,9 +85,9 @@ def test_explore_identifies_the_source_that_failed(
     make_record, config, in_process, snippet, file, line, stage
 ):
     record = make_record("def create_build():\n    raise ValueError('build problem')\n")
-    tool = execute_tool(record, config, "explore", {"code": snippet})
+    report = explore(record, snippet, config)
     cli = _external(record, config, "explore", "--code", snippet)
-    assert cli == json.loads(tool.content)
+    assert cli == report.model_dump(mode="json")
     (issue,) = cli["diagnostics"]
     assert issue["evidence"]["source"]["file"] == file
     assert issue["evidence"]["source"]["line"] == line
@@ -146,8 +99,8 @@ def test_connector_ambiguity_carries_actual_candidates(make_record, config, in_p
 def create_build():
     return bl.Element("3001", bl.Color.RED).find_connector("stud")
 """)
-    tool = execute_tool(record, config, "validate", {})
-    (issue,) = json.loads(tool.content)["diagnostics"]
+    cli = _external(record, config, "validate")
+    (issue,) = cli["diagnostics"]
     assert issue["code"] == "connector.ambiguous"
     assert issue["stage"] == "create_build"
     assert issue["evidence"]["matches"] == 8
@@ -184,12 +137,12 @@ def test_finalize_feedback_includes_sampled_motion_and_joint_evidence(
     make_record, config, in_process
 ):
     record = make_record(_MOTION_BUILD)
-    tool = execute_tool(record, config, "finalize", {})
+    report = finalize(record, config)
     cli = _external(record, config, "finalize")
-    assert not tool.done
+    assert not report.ok
     assert not record.ldr_path.exists()
     issues = cli["validation"]["diagnostics"]
-    assert issues == json.loads(tool.content)["validation"]["diagnostics"]
+    assert issues == json.loads(report.agent_json())["validation"]["diagnostics"]
     collision = next(issue for issue in issues if issue["code"] == "motion.collision")
     assert collision["stage"] == "check_motion"
     (sample,) = collision["evidence"]["samples"]
@@ -212,14 +165,14 @@ def test_export_failure_distinguishes_successful_validation(
         raise OSError("export fixture failed")
 
     monkeypatch.setattr(rendering, "build_ldraw", fail)
-    tool = execute_tool(record, config, "finalize", {})
+    report = finalize(record, config)
     cli = _external(record, config, "finalize")
     assert cli["validation"]["ok"] and not cli["ok"]
     (issue,) = cli["diagnostics"]
     assert (issue["stage"], issue["code"]) == ("export", "output.export_failed")
     assert issue["evidence"]["exception_message"] == "export fixture failed"
     assert issue["evidence"]["path"] == "out/build.ldr"
-    assert json.loads(tool.content)["diagnostics"] == cli["diagnostics"]
+    assert report.model_dump(mode="json")["diagnostics"] == cli["diagnostics"]
     assert not record.ldr_path.exists()
 
 
@@ -227,9 +180,9 @@ def test_export_failure_distinguishes_successful_validation(
 def test_timeout_and_abnormal_exit_include_worker_facts(
     make_record, config, infinite_build
 ):
-    timeout_config = config.model_copy(update={"build_timeout": 0.2})
-    timeout = execute_tool(make_record(infinite_build), timeout_config, "validate", {})
-    (issue,) = json.loads(timeout.content)["diagnostics"]
+    record = make_record(infinite_build)
+    timeout = _external(record, config, "validate", "--timeout", "0.2")
+    (issue,) = timeout["diagnostics"]
     assert issue["code"] == "execution.timeout"
     assert issue["evidence"] == {"operation": "validate", "timeout_seconds": 0.2}
     record = make_record("import os\ndef create_build():\n    os._exit(28)\n")
@@ -263,26 +216,25 @@ def run_tests():
     return []
 """
     record = make_record(source)
-    failed = execute_tool(record, config, "finalize", {})
-    (issue,) = failed.diagnostics
-    assert issue.code == "connector.ambiguous"
-    assert issue.evidence["matches"] == 2
+    failed = _external(record, config, "finalize")
+    (issue,) = failed["validation"]["diagnostics"]
+    assert issue["code"] == "connector.ambiguous"
+    assert issue["evidence"]["matches"] == 2
     assert not record.ldr_path.exists()
     old_report = record.snapshots[0].report_path.read_text()
 
-    edit = execute_tool(
-        record,
-        config,
-        "edit_build",
-        {
-            "old_str": 'base.find_connector("stud")',
-            "new_str": 'base.find_connector("stud", toward=bl.Position(0.5, 0.5, 1))',
-        },
+    record.build_path.write_text(
+        source.replace(
+            'base.find_connector("stud")',
+            'base.find_connector("stud", toward=bl.Position(0.5, 0.5, 1))',
+        )
     )
-    assert edit.ok
     monkeypatch.setattr(rendering, "render_available", lambda: False)
-    corrected = execute_tool(record, config, "finalize", {})
-    assert corrected.ok and corrected.done
+    result = CliRunner().invoke(
+        app,
+        ["external", "finalize", record.id, "--records-dir", str(config.records_dir)],
+    )
+    assert result.exit_code == 0, result.output
     assert record.ldr_path.exists()
     assert record.snapshots[0].read_build() == source
     assert record.snapshots[0].report_path.read_text() == old_report
@@ -297,8 +249,7 @@ def create_build():
     raise RuntimeError("from the original")
 """
     record = make_record(original)
-    result = execute_tool(record, config, "validate", {})
-    payload = json.loads(result.content)
+    payload = _external(record, config, "validate")
     changed, failure = payload["diagnostics"]
     assert changed["code"] == "source.changed"
     assert changed["evidence"]["current_sha256"] == record.source_sha256
@@ -320,13 +271,13 @@ def test_render_library_failure_is_actionable_through_both_entries(
         raise LDrawLibraryNotFound("library fixture missing")
 
     monkeypatch.setattr(rendering, "_convert", fail)
-    tool = execute_tool(record, config, "render", {})
+    report = rendering.render(record, config)
     cli = _external(record, config, "render")
     (issue,) = cli["diagnostics"]
     assert (issue["stage"], issue["code"]) == ("render", "output.ldraw_library_missing")
     assert issue["evidence"]["environment_variable"] == "LDRAW_LIBRARY_PATH"
     assert "LDRAW_LIBRARY_PATH" in issue["next_action"]
-    assert json.loads(tool.content)["diagnostics"] == cli["diagnostics"]
+    assert report.model_dump(mode="json")["diagnostics"] == cli["diagnostics"]
 
 
 def test_static_check_evidence_names_repeated_submodel_occurrences():
@@ -357,9 +308,9 @@ def test_missing_connector_annotations_use_official_catalog_facts(
     snippet = (
         'bricklayer.Element("10040", bricklayer.Color.RED).find_connector("hinge_7_in")'
     )
-    tool = execute_tool(record, config, "explore", {"code": snippet})
+    report = explore(record, snippet, config)
     cli = _external(record, config, "explore", "--code", snippet)
-    assert cli["diagnostics"] == json.loads(tool.content)["diagnostics"]
+    assert cli["diagnostics"] == report.model_dump(mode="json")["diagnostics"]
     (issue,) = cli["diagnostics"]
     capabilities = lookup_part("10040")
     assert issue["stage"] == "explore"
@@ -377,9 +328,9 @@ def test_a_nonexistent_catalog_id_is_distinct_from_missing_annotations(
     record, config, in_process
 ):
     snippet = 'bricklayer.PartSpec("diagnostic-fixture-outside-release")'
-    tool = execute_tool(record, config, "explore", {"code": snippet})
+    report = explore(record, snippet, config)
     cli = _external(record, config, "explore", "--code", snippet)
-    assert cli["diagnostics"] == json.loads(tool.content)["diagnostics"]
+    assert cli["diagnostics"] == report.model_dump(mode="json")["diagnostics"]
     (issue,) = cli["diagnostics"]
     assert issue["stage"] == "explore"
     assert issue["code"] == "catalog.unknown_part"

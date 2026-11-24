@@ -5,7 +5,7 @@ import unicodedata
 from functools import cache
 from importlib import resources
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, computed_field
 
 __all__ = [
     "KnowledgeCapability",
@@ -20,6 +20,7 @@ __all__ = [
 ]
 
 _RESOURCES = resources.files(__name__)
+_REFERENCE_DIR = "references/knowledge"
 _IDENTIFIERS = re.compile(r"[a-z0-9]+(?:[._-][a-z0-9]+)*")
 _WORDS = re.compile(r"[\u3400-\u9fff]+|[^\W\d_\u3400-\u9fff]+")
 _COMMON_WORDS = frozenset(
@@ -108,6 +109,12 @@ class KnowledgeMatch(_Summary):
     """A topic worth reading, with the index fields and terms that matched."""
 
     matched_on: dict[str, tuple[str, ...]]
+
+    @computed_field
+    @property
+    def path(self) -> str:
+        """Path to this entry relative to the installed skill."""
+        return _reference_path(self.id)
 
 
 class KnowledgeCapability(BaseModel):
@@ -204,6 +211,66 @@ def read_knowledge(entry_id: str) -> KnowledgeEntry:
     return KnowledgeEntry.model_validate({**data.model_dump(), "example": example})
 
 
+def knowledge_reference_files() -> dict[str, bytes]:
+    """Render installable knowledge pages and examples from the search corpus."""
+    files = {
+        f"{_REFERENCE_DIR}/{name}": (_RESOURCES / name).read_bytes()
+        for name in ("CONTENT-LICENSE.md", "LICENSE")
+    }
+    for entry_id in _entries():
+        entry = read_knowledge(entry_id)
+        lines = [
+            f"# {entry.title}",
+            "",
+            entry.applicability,
+            "",
+            "## Steps",
+            "",
+            *(f"{number}. {step}" for number, step in enumerate(entry.steps, 1)),
+            "",
+            "## Expected result",
+            "",
+            entry.expected,
+        ]
+        if example := entry.example:
+            path = f"examples/{example.filename}"
+            lines.extend(
+                ("", f"Run the [Python example]({path}) using the SDK environment.")
+            )
+            files[f"{_REFERENCE_DIR}/{path}"] = example.source.encode("utf-8")
+        for title, values in (
+            ("Part IDs", entry.parts),
+            ("Diagnostics", entry.diagnostics),
+        ):
+            if values:
+                lines.extend(
+                    (
+                        "",
+                        f"**{title}** — " + ", ".join(f"`{value}`" for value in values),
+                    )
+                )
+        lines.extend(("", "## Sources", ""))
+        for source in entry.sources:
+            link = f"[{source.title}]({source.url})"
+            credit = (
+                f" [Attribution]({source.attribution_url})."
+                if source.attribution_url
+                else ""
+            )
+            lines.append(
+                f"- {source.author}. {source.license}. {source.adaptation} {link}.{credit}"
+            )
+        lines.extend(
+            ("", "[Content license](CONTENT-LICENSE.md) · [MIT license](LICENSE)", "")
+        )
+        files[_reference_path(entry.id)] = "\n".join(lines).encode("utf-8")
+    return files
+
+
+def _reference_path(entry_id: str) -> str:
+    return f"{_REFERENCE_DIR}/{entry_id}.md"
+
+
 def _lookup_part(part_id: str) -> KnowledgePart:
     from bricklayer import lookup_part
 
@@ -213,7 +280,7 @@ def _lookup_part(part_id: str) -> KnowledgePart:
 @cache
 def _entries() -> dict[str, _EntryResource]:
     entries = {}
-    for path in (_RESOURCES / "entries").iterdir():
+    for path in sorted((_RESOURCES / "entries").iterdir(), key=lambda path: path.name):
         if not path.name.endswith(".json"):
             continue
         entry = _EntryResource.model_validate_json(path.read_text(encoding="utf-8"))

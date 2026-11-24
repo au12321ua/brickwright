@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import json
+from collections import Counter
 from collections.abc import Iterable
 from contextlib import redirect_stdout
 from hashlib import sha256
@@ -30,7 +31,7 @@ from ..flow.structure import (
     inspect_build,
     inspect_mpd,
 )
-from ..record import Record, Status
+from ..record import Record, Status, ValidationFailures
 from . import build_execution
 from .diagnostics import (
     Diagnostic,
@@ -432,3 +433,23 @@ def build_and_validate(
 
 def _stdout(buf: io.StringIO) -> str:
     return build_execution.cap_output(buf.getvalue())
+
+
+def tally_failure(
+    failures: ValidationFailures, report: ValidationReport
+) -> ValidationFailures:
+    """``failures`` with ``report``'s failure reason folded in (a passing report
+    leaves it unchanged).
+
+    A build error is tallied by its exception type (``"Unknown"`` if absent);
+    otherwise each failing check is tallied by name. Returns a new value.
+    """
+    if report.ok:
+        return failures
+    if report.build_error is not None:
+        counts = Counter(failures.build_errors)
+        counts[report.error_type or "Unknown"] += 1
+        return failures.model_copy(update={"build_errors": dict(counts)})
+    counts = Counter(failures.failing_checks)
+    counts.update(report.failed_checks)
+    return failures.model_copy(update={"failing_checks": dict(counts)})

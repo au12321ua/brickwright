@@ -23,20 +23,5 @@ class TestDefaults:
     def test_sensible_numeric_defaults(self):
         c = Config()
         assert c.max_validations > 0
-        assert c.max_turns > 0
-        assert c.max_cost > 0
         assert c.build_timeout > 0
         assert c.render_timeout > 0
-
-    def test_sensible_subagent_defaults(self):
-        c = Config()
-        assert c.subagents_enabled is False
-        assert c.is_subagent is False
-        assert c.max_parallel_subagents > 0
-        assert c.subagent_max_turns > 0
-        assert c.subagent_max_cost > 0
-
-    def test_subagent_tiers_default_is_not_shared_between_instances(self):
-        a = Config()
-        b = Config()
-        assert a.subagent_tiers is not b.subagent_tiers

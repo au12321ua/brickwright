@@ -14,15 +14,13 @@ from bricklayer.geometry import Vec3
 from bricklayer.ldraw.conversion import LDRAW_TO_STUD, LDrawVec
 from pydantic import BaseModel, ConfigDict, Field
 
-from ..record import Generation, Meta, Record, Snapshot, Status
+from ..record import Meta, Record, Snapshot, Status
 from ..tools.diagnostics import Diagnostic, exception_diagnostic
 from .contracts import ModuleError, digest, json_bytes, read_contracts
 from .geometry import self_check
 
 if TYPE_CHECKING:
     from bricklayer import LegoBuild
-
-    from ..config import Config
 
 MODULE_DIR = "modules"
 CONTRACT_FILE = "module-contract.json"
@@ -71,10 +69,8 @@ def child_ref(child: Record) -> str:
 def init_module(
     parent: Record,
     module_id: str,
-    config: Config,
     *,
     prompt: str = "",
-    external: bool = True,
 ) -> Record:
     """Initialize a module, or refresh its contract while preserving the local work."""
     if (parent.path / CONTRACT_FILE).is_file():
@@ -119,12 +115,6 @@ def init_module(
         Meta(
             id=module_id,
             created=datetime.now(UTC),
-            generation=Generation(
-                model=config.model,
-                effort=config.effort,
-                external=external,
-                config=config.model_dump(mode="json", exclude={"records_dir"}),
-            ),
             prompt=prompt,
             prompt_image=parent.read_meta().prompt_image,
         )
@@ -388,9 +378,5 @@ def finish_module_session(
             )
     if usage is not None:
         result["usage"] = usage
-        if child.messages_path.is_file():
-            transcript = path.parent / f"{session_id}.messages.jsonl"
-            atomic_write(transcript, child.messages_path.read_bytes(), immutable=True)
-            result["transcript"] = str(transcript.relative_to(child.path))
     atomic_write(path, json_bytes(result))
     return result

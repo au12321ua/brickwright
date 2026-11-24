@@ -1,14 +1,17 @@
-"""Agent-facing tools, loaded on first access so importing one skips the rest."""
+"""Workflow operations, loaded on first access so importing one skips the rest."""
 
 from importlib import import_module
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from .diagnostics import Diagnostic
-    from .editing import edit_build, insert_build, multi_edit_build
     from .exploration import SnippetResult, explore
-    from .finalization import FinalizationReport, finalize
-    from .registry import ToolOutcome, available_tools, execute_tool
+    from .finalization import (
+        DeliveryVerification,
+        FinalizationReport,
+        finalize,
+        verify_delivery,
+    )
     from .rendering import (
         RenderReport,
         angle_to_view_dir,
@@ -22,10 +25,13 @@ if TYPE_CHECKING:
 
 _SUBMODULES = {
     "diagnostics": ("Diagnostic",),
-    "editing": ("edit_build", "insert_build", "multi_edit_build"),
     "exploration": ("SnippetResult", "explore"),
-    "finalization": ("FinalizationReport", "finalize"),
-    "registry": ("ToolOutcome", "available_tools", "execute_tool"),
+    "finalization": (
+        "DeliveryVerification",
+        "FinalizationReport",
+        "finalize",
+        "verify_delivery",
+    ),
     "rendering": (
         "RenderReport",
         "angle_to_view_dir",
@@ -41,26 +47,22 @@ _SOURCE = {name: module for module, names in _SUBMODULES.items() for name in nam
 
 __all__ = [
     "CheckResult",
+    "DeliveryVerification",
     "Diagnostic",
     "FinalizationReport",
     "RenderReport",
     "SnippetResult",
     "TestContext",
-    "ToolOutcome",
     "ValidationReport",
     "angle_to_view_dir",
-    "available_tools",
-    "edit_build",
-    "execute_tool",
     "explore",
     "finalize",
-    "insert_build",
-    "multi_edit_build",
     "render",
     "render_angle",
     "render_available",
     "render_views",
     "validate",
+    "verify_delivery",
 ]
 
 

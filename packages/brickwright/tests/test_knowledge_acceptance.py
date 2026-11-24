@@ -13,7 +13,6 @@ from typer.testing import CliRunner
 
 from brickwright.cli import app
 from brickwright.knowledge import search_knowledge
-from brickwright.tools import execute_tool
 
 
 @pytest.mark.parametrize(
@@ -66,15 +65,11 @@ from brickwright.tools import execute_tool
         ("composting banana peels", None),
     ],
 )
-def test_corpus_search_from_both_agent_entry_points(record, config, query, entry_id):
-    internal = execute_tool(
-        record, config, "search_building_knowledge", {"query": query}
-    )
+def test_corpus_search_from_cli(query, entry_id):
     external = CliRunner().invoke(app, ["knowledge", "search", query])
-    assert internal.ok
     assert external.exit_code == 0, external.output
-    result = json.loads(internal.content)
-    assert result == json.loads(external.stdout)
+    result = json.loads(external.stdout)
+    assert result == search_knowledge(query).model_dump(mode="json")
     if entry_id is None:
         assert result["matches"] == []
         assert result["message"]
@@ -104,7 +99,7 @@ def test_indexed_part_queries_report_live_catalog_capabilities(part_id):
 
 
 @pytest.mark.integration
-def test_installed_wheel_has_search_example_and_sources_outside_checkout(tmp_path):
+def test_installed_wheels_provide_skill_example_and_sources_outside_checkout(tmp_path):
     uv = shutil.which("uv")
     if uv is None:
         pytest.skip("uv is required to build and install the wheel")
@@ -117,9 +112,19 @@ def test_installed_wheel_has_search_example_and_sources_outside_checkout(tmp_pat
         [uv, "build", "--wheel", "--offline", "--no-cache", "--out-dir", str(dist)],
         cwd=package,
     )
+    _run(
+        [uv, "build", "--wheel", "--offline", "--no-cache", "--out-dir", str(dist)],
+        cwd=package.parent / "bricklayer",
+    )
     wheel = next(dist.glob("brickwright-*.whl"))
+    sdk_wheel = next(dist.glob("bricklayer_sdk-*.whl"))
     with ZipFile(wheel) as content:
         assert "brickwright/knowledge/CONTENT-LICENSE.md" in content.namelist()
+        assert "brickwright/skill/SKILL.md" in content.namelist()
+        assert (
+            content.read("brickwright/knowledge/LICENSE")
+            == (package / "LICENSE").read_bytes()
+        )
     _run(
         [
             uv,
@@ -131,17 +136,40 @@ def test_installed_wheel_has_search_example_and_sources_outside_checkout(tmp_pat
             "--target",
             str(installed),
             str(wheel),
+            str(sdk_wheel),
         ],
         cwd=workspace,
     )
     cli = [sys.executable, "-m", "brickwright", "knowledge"]
     env = {**os.environ, "PYTHONPATH": str(installed)}
-    module_source = _run(
-        [sys.executable, "-c", "import brickwright; print(brickwright.__file__)"],
+    module_sources = _run(
+        [
+            sys.executable,
+            "-c",
+            "import brickwright, bricklayer; print(brickwright.__file__); print(bricklayer.__file__)",
+        ],
         cwd=workspace,
         env=env,
     )
-    assert Path(module_source.strip()).is_relative_to(installed)
+    assert all(
+        Path(source).is_relative_to(installed) for source in module_sources.splitlines()
+    )
+    skill = workspace / "skills" / "brickwright"
+    _run(
+        [
+            sys.executable,
+            "-m",
+            "brickwright",
+            "skill",
+            "install",
+            "--target",
+            str(skill),
+        ],
+        cwd=workspace,
+        env=env,
+    )
+    assert (skill / "SKILL.md").is_file()
+    assert (skill / "references/api/connections.md").is_file()
     search = json.loads(
         _run(
             [*cli, "search", "Attach trim outside the glazed wall opening"],
@@ -161,8 +189,11 @@ def test_installed_wheel_has_search_example_and_sources_outside_checkout(tmp_pat
         ref["author"] and ref["license"] and ref["adaptation"]
         for ref in entry["sources"]
     )
-    example = workspace / entry["example"]["filename"]
-    example.write_text(entry["example"]["source"], encoding="utf-8")
+    article = (skill / match["path"]).read_text(encoding="utf-8")
+    assert entry["expected"] in article
+    assert entry["sources"][0]["license"] in article
+    example = skill / "references/knowledge/examples" / entry["example"]["filename"]
+    assert example.read_text(encoding="utf-8") == entry["example"]["source"]
     _run([sys.executable, str(example)], cwd=workspace, env=env)
 
 

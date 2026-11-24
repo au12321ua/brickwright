@@ -5,7 +5,6 @@ import json
 from typer.testing import CliRunner
 
 from brickwright.cli import app
-from brickwright.tools.registry import execute_tool
 
 _TWO_HOLES = """import bricklayer as bl
 
@@ -30,13 +29,16 @@ def test_repair_an_ambiguous_port_using_the_packaged_guide(
 ):
     monkeypatch.setattr("brickwright.tools.rendering.render_available", lambda: False)
     record = make_record(_TWO_HOLES)
-    failure = execute_tool(record, config, "validate", {})
-    assert not failure.ok
-    (issue,) = json.loads(failure.content)["diagnostics"]
+    runner = CliRunner()
+    failure = runner.invoke(
+        app,
+        ["external", "validate", record.id, "--records-dir", str(config.records_dir)],
+    )
+    assert failure.exit_code == 1, failure.output
+    (issue,) = json.loads(failure.stdout)["diagnostics"]
     assert issue["code"] == "connector.ambiguous"
     assert issue["evidence"]["part_id"] == "32000"
 
-    runner = CliRunner()
     found = runner.invoke(app, ["knowledge", "search", issue["code"]])
     assert found.exit_code == 0, found.output
     matches = json.loads(found.stdout)["matches"]
